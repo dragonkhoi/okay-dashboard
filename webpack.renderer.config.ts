@@ -15,6 +15,7 @@ const copyPlugins = new CopyWebpackPlugin(
   }
 );
 
+// Update CSS rule to properly handle Tailwind CSS
 rules.push({
   test: /\.css$/,
   use: [
@@ -37,5 +38,8 @@ export const rendererConfig: Configuration = {
   plugins: [...plugins, copyPlugins],
   resolve: {
     extensions: ['.js', '.ts', '.jsx', '.tsx', '.css'],
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
   },
 };

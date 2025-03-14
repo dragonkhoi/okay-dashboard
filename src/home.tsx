@@ -4,10 +4,16 @@ import DynamicComponent from "./components/DynamicComponent";
 import { McpServerConfig } from "./services/mcpClient";
 import NumberMetric from "./components/NumberMetric";
 import TailwindTest from "./components/TailwindTest";
-import { AGENT_PREFIX, MCP_SERVER_ICONS, PLANNER_AGENT, SERVER_TOOL_NAME_SEPARATOR } from "./constants";
+import {
+  AGENT_PREFIX,
+  MCP_SERVER_ICONS,
+  PLANNER_AGENT,
+  SERVER_TOOL_NAME_SEPARATOR,
+} from "./constants";
 import { cleanServerName } from "./services/utils";
 import { Agent } from "./services/swarm/agent";
 import ToolUseCollapsible from "./components/ToolUseCollapsible";
+import RecentActivity from "./components/RecentActivity";
 
 // Extend the Window interface to include our Electron API
 declare global {
@@ -210,74 +216,106 @@ const ServerStatusIcon = ({
   );
 };
 
-const ChatBubble = ({ message, toolResultMessage }: { 
-  message: { 
-    role: "user" | "assistant"; 
-    sender: string; 
-    type: "text" | "tool_use" | "tool_result" | "agent_transfer"; 
-    content: any 
-  },
-  toolResultMessage?: { 
-    role: "user" | "assistant"; 
-    sender: string; 
-    type: "text" | "tool_use" | "tool_result"; 
-    content: any 
-  }
+const ChatBubble = ({
+  message,
+  toolResultMessage,
+}: {
+  message: {
+    role: "user" | "assistant";
+    sender: string;
+    type: "text" | "tool_use" | "tool_result" | "agent_transfer";
+    content: any;
+  };
+  toolResultMessage?: {
+    role: "user" | "assistant";
+    sender: string;
+    type: "text" | "tool_use" | "tool_result";
+    content: any;
+  };
 }) => {
   // Handle agent transfer messages
   if (message.type === "agent_transfer") {
-    return <div className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
-      message.role === "user" ? "self-end bg-blue-500 text-white" : "self-start bg-gray-100 text-gray-800"
-    }`}>
-      <pre>{message.content}</pre>
-    </div>
+    return (
+      <div
+        className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
+          message.role === "user"
+            ? "self-end bg-blue-500 text-white"
+            : "self-start bg-gray-100 text-gray-800"
+        }`}
+      >
+        <pre>{message.content}</pre>
+      </div>
+    );
   }
-  
+
   if (message.type === "tool_use") {
     if (message.content[0].name.startsWith(AGENT_PREFIX)) {
-      return <p className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
-        message.role === "user" ? "self-end bg-blue-500 text-white" : "self-start bg-gray-100 text-gray-800"
-      }`}>Asking {message.content[0].name.split(SERVER_TOOL_NAME_SEPARATOR)[1]}...</p>
+      return (
+        <p
+          className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
+            message.role === "user"
+              ? "self-end bg-blue-500 text-white"
+              : "self-start bg-gray-100 text-gray-800"
+          }`}
+        >
+          Asking {message.content[0].name.split(SERVER_TOOL_NAME_SEPARATOR)[1]}
+          ...
+        </p>
+      );
     }
-    
+
     // Use the ToolUseCollapsible component for tool calls
-    return <ToolUseCollapsible 
-      toolCall={message as any} 
-      toolResult={toolResultMessage as any}
-      isAssistant={message.role === "assistant"} 
-    />
+    return (
+      <ToolUseCollapsible
+        toolCall={message as any}
+        toolResult={toolResultMessage as any}
+        isAssistant={message.role === "assistant"}
+      />
+    );
   }
-  
+
   // If it's a tool result without a paired tool call, show it directly
   if (message.type === "tool_result" && !toolResultMessage) {
     // if the tool result is from transferring to an agent, don't show it
     if (message.content[0].content.startsWith(AGENT_PREFIX)) {
-      return <></>
+      return <></>;
     }
-    return <div className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
-      message.role === "user" ? "self-end bg-blue-500 text-white" : "self-start bg-gray-100 text-gray-800"
-    }`}>
-      <div className="text-xs font-medium mb-1 opacity-70">Tool Result:</div>
-      <pre className="text-xs bg-gray-200 p-2 rounded overflow-auto max-h-60">
-        {JSON.stringify(message.content, null, 2)}
-      </pre>
-    </div>
+    return (
+      <div
+        className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
+          message.role === "user"
+            ? "self-end bg-blue-500 text-white"
+            : "self-start bg-gray-100 text-gray-800"
+        }`}
+      >
+        <div className="text-xs font-medium mb-1 opacity-70">Tool Result:</div>
+        <pre className="text-xs bg-gray-200 p-2 rounded overflow-auto max-h-60">
+          {JSON.stringify(message.content, null, 2)}
+        </pre>
+      </div>
+    );
   }
-  
+
   // Skip tool results that are paired with tool calls (they're shown in ToolUseCollapsible)
   if (message.type === "tool_result" && toolResultMessage) {
     return <></>;
   }
-  
+
   // user message right and blue, assistant message left and gray
-  return <div className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
-    message.role === "user"
-      ? "self-end bg-blue-500 text-white"
-      : "self-start bg-gray-100 text-gray-800"
-  }`}>
-    {typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}
-  </div>
-}
+  return (
+    <div
+      className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
+        message.role === "user"
+          ? "self-end bg-blue-500 text-white"
+          : "self-start bg-gray-100 text-gray-800"
+      }`}
+    >
+      {typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content)}
+    </div>
+  );
+};
 
 export default function Home() {
   const [messages, setMessages] = useState<
@@ -300,7 +338,8 @@ export default function Home() {
   const [mcpConnected, setMcpConnected] = useState(false);
   const [mcpServerPath, setMcpServerPath] = useState("npx");
   const [mcpServerArgs, setMcpServerArgs] = useState("");
-  const [currentAgentName, setCurrentAgentName] = useState<string>(PLANNER_AGENT);
+  const [currentAgentName, setCurrentAgentName] =
+    useState<string>(PLANNER_AGENT);
   const [availableMcpServers, setAvailableMcpServers] = useState<
     Record<string, any>
   >({});
@@ -310,7 +349,16 @@ export default function Home() {
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [cardsData, setCardsData] = useState<any[]>([]);
-  const [cardsContext, setCardsContext] = useState<Record<number, any>>({});
+  const [cardsContext, setCardsContext] = useState<
+    Record<
+      number,
+      {
+        aiResponse: string;
+        toolCalls: Array<{ name: string; arguments: Record<string, any> }>;
+        toolCallsResult: Array<{ name: string; response: any }>;
+      }
+    >
+  >({});
   const [dashboardQuestions, setDashboardQuestions] = useState<
     Array<{
       id?: number;
@@ -382,19 +430,49 @@ export default function Home() {
   // Fetch Mixpanel data when connected to MCP
   useEffect(() => {
     const fetchCardsData = async () => {
+      // START DUMMY DATA
+      setCardsData([
+        {
+          id: 1,
+          title: "Dashboard Card 1",
+          value: 100,
+        },
+        {
+          id: 2,
+          title: "Dashboard Card 2",
+          value: 200,
+        },
+      ]);
+      return;
+      // END DUMMY DATA
       if (mcpConnected && dashboardQuestions.length > 0) {
-        const results: any[] = [];
-
-        for (const question of dashboardQuestions) {
-          const result = await fetchQuestionData(question);
-          results.push(result);
-        }
-
+        const results = await Promise.all(
+          dashboardQuestions.map((question) => fetchQuestionData(question))
+        );
         setCardsData(results);
       }
     };
 
     const fetchAlertData = async () => {
+      // START DUMMY DATA
+      setDashboardAlerts([
+        {
+          title: "Dashboard Alert 1",
+          type: "NewsAlert",
+          caption: "This is a news alert",
+          color: "#000000",
+          hero: "🚨",
+        },
+        {
+          title: "Dashboard Alert 2",
+          type: "NewsAlert",
+          caption: "This is a news alert",
+          color: "#007733",
+          hero: "$4,519",
+        },
+      ]);
+      return;
+      // END DUMMY DATA
       if (mcpConnected) {
         const result = await askAINoChat(
           "Look at today's top events and flag the best thing demonstrating a business success standing out as a news alert",
@@ -414,7 +492,7 @@ export default function Home() {
       }
     };
 
-    fetchCardsData();
+    // fetchCardsData();
     fetchAlertData();
   }, [mcpConnected, connectedClients, dashboardQuestions]);
 
@@ -507,6 +585,12 @@ export default function Home() {
         ...prev,
         [questionId]: {
           aiResponse: response.content,
+          toolCalls: response.toolCalls.map((toolCall) => {
+            return {
+              name: toolCall.name,
+              arguments: toolCall.arguments,
+            };
+          }),
           toolCallsResult: toolCallsResult,
         },
       }));
@@ -532,7 +616,13 @@ export default function Home() {
     const userMessage = inputValue.trim();
     setMessages((prev) => [
       ...prev,
-      { text: userMessage, role: "user", sender: "user", type: "text", content: userMessage },
+      {
+        text: userMessage,
+        role: "user",
+        sender: "user",
+        type: "text",
+        content: userMessage,
+      },
     ]);
     setInputValue("");
     setIsProcessing(true);
@@ -607,12 +697,14 @@ export default function Home() {
         messagesToProcess
       );
       console.log("swarmResponse", swarmResponse);
-      setMessages(swarmResponse.messages.map((message) => ({
-        role: message.role,
-        sender: message.sender,
-        type: message.type,
-        content: message.content,
-      })));
+      setMessages(
+        swarmResponse.messages.map((message) => ({
+          role: message.role,
+          sender: message.sender,
+          type: message.type,
+          content: message.content,
+        }))
+      );
       setCurrentAgentName(swarmResponse.agentName);
     } catch (error) {
       console.error("Error processing message:", error);
@@ -1036,68 +1128,74 @@ export default function Home() {
       message: any;
       toolResultMessage?: any;
     }> = [];
-    
+
     for (let i = 0; i < messages.length; i++) {
       const currentMessage = messages[i];
-      
+
       // Check for agent transfer sequence (text + tool_use with agent prefix + tool_result with agent prefix)
-      if (i < messages.length - 2 && 
-          currentMessage.type === "text" && 
-          messages[i+1].type === "tool_use" && 
-          messages[i+1].content[0]?.name?.startsWith(AGENT_PREFIX) &&
-          messages[i+2].type === "tool_result" && 
-          typeof messages[i+2].content[0]?.content === 'string' &&
-          messages[i+2].content[0]?.content?.startsWith(AGENT_PREFIX)) {
-        
+      if (
+        i < messages.length - 2 &&
+        currentMessage.type === "text" &&
+        messages[i + 1].type === "tool_use" &&
+        messages[i + 1].content[0]?.name?.startsWith(AGENT_PREFIX) &&
+        messages[i + 2].type === "tool_result" &&
+        typeof messages[i + 2].content[0]?.content === "string" &&
+        messages[i + 2].content[0]?.content?.startsWith(AGENT_PREFIX)
+      ) {
         // Get the agent name from the tool call
-        const agentFullName = messages[i+1].content[0].name.split(SERVER_TOOL_NAME_SEPARATOR)[1] || "unknown";
+        const agentFullName =
+          messages[i + 1].content[0].name.split(
+            SERVER_TOOL_NAME_SEPARATOR
+          )[1] || "unknown";
         // Convert from snake_case to readable format
         const agentName = agentFullName
-          .split('_')
+          .split("_")
           .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        
+          .join(" ");
+
         // Create a collapsed message
         pairedMessages.push({
           message: {
             ...currentMessage,
             content: `Asking ${agentName}...`,
             text: `Asking ${agentName}...`,
-            type: "agent_transfer"
-          }
+            type: "agent_transfer",
+          },
         });
-        
+
         // Skip the next two messages since we've collapsed them
         i += 2;
       }
       // If this is a tool_use message, check if the next message is its result
       else if (currentMessage.type === "tool_use") {
         const nextMessage = i < messages.length - 1 ? messages[i + 1] : null;
-        
+
         if (nextMessage?.type === "tool_result") {
           // Add the pair and skip the next message (it will be included with this one)
           pairedMessages.push({
             message: currentMessage,
-            toolResultMessage: nextMessage
+            toolResultMessage: nextMessage,
           });
           i++; // Skip the next message since we've paired it
         } else {
           // No result yet, just add the tool call
           pairedMessages.push({
-            message: currentMessage
+            message: currentMessage,
           });
         }
-      } else if (currentMessage.type !== "tool_result" || 
-                (currentMessage.type === "tool_result" && 
-                 (i === 0 || messages[i-1].type !== "tool_use"))) {
+      } else if (
+        currentMessage.type !== "tool_result" ||
+        (currentMessage.type === "tool_result" &&
+          (i === 0 || messages[i - 1].type !== "tool_use"))
+      ) {
         // Add regular messages or unpaired tool results
         pairedMessages.push({
-          message: currentMessage
+          message: currentMessage,
         });
       }
       // Skip tool_result messages that follow tool_use (they're handled in the tool_use case)
     }
-    
+
     return pairedMessages;
   };
 
@@ -1247,10 +1345,10 @@ export default function Home() {
         <div className="w-1/2 flex flex-col bg-white transition-width duration-300 border-r border-gray-200">
           <div className="flex-1 p-5 overflow-y-auto flex flex-col gap-3">
             {getPairedMessages(messages).map((item, index) => (
-              <ChatBubble 
-                key={index} 
-                message={item.message} 
-                toolResultMessage={item.toolResultMessage} 
+              <ChatBubble
+                key={index}
+                message={item.message}
+                toolResultMessage={item.toolResultMessage}
               />
             ))}
             <div ref={messagesEndRef} />
@@ -1305,29 +1403,11 @@ export default function Home() {
         </div>
 
         <div className="w-1/2 flex flex-col bg-white overflow-hidden">
-          <div className="flex flex-col m-4 rounded-md shadow-md">
-            <div className="p-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="m-0 text-base text-gray-800 font-semibold">
-                Recent Activity
-              </h3>
-            </div>
-            <div className="flex flex-col gap-2 p-4 ">
-              {dashboardAlerts.map((alert) => (
-                <div key={alert.title} className="flex flex-col gap-2">
-                  <div className="flex flex-row gap-2">
-                    <h3
-                      className={`text-xl font-semibold`}
-                      style={{ color: alert.color }}
-                    >
-                      {alert.hero}
-                    </h3>
-                    <h4 className="text-lg font-semibold">{alert.title}</h4>
-                  </div>
-                  <p>{alert.caption}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <RecentActivity activity={{
+            emails: [],
+            calendarEvents: [],
+            alerts: dashboardAlerts
+          }} />
 
           {selectedCard !== null ? (
             <div className="flex flex-col h-full overflow-hidden bg-white rounded-lg shadow-md m-5">
@@ -1365,7 +1445,7 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              <div className="p-4 flex-1 overflow-auto">
+              <div className="px-4 flex-1 overflow-auto">
                 {selectedCard?.type === "NumberMetric" && (
                   <NumberMetric
                     value={selectedCard?.value}
@@ -1373,7 +1453,7 @@ export default function Home() {
                   />
                 )}
               </div>
-              <div className="flex flex-col gap-2 px-4 pb-4">
+              <div className="flex flex-col gap-2 px-4 pb-4 overflow-auto">
                 <div className="flex flex-col w-full gap-2">
                   <h3>Question</h3>
                   <input
@@ -1410,6 +1490,56 @@ export default function Home() {
                     }}
                   />
                 </div>
+                <div className="px-4">
+                {selectedCard?.id &&
+                  cardsContext[selectedCard.id]?.toolCalls &&
+                  cardsContext[selectedCard.id].toolCalls.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <h3>Tool Usage</h3>
+                      {cardsContext[selectedCard.id].toolCalls.map(
+                        (toolCall: any, index: number) => {
+                          // Extract server name and tool name
+                          const toolName = toolCall.name || "";
+                          // Check if the tool name already contains the separator
+                          const hasServerPrefix = toolName.includes(SERVER_TOOL_NAME_SEPARATOR);
+                          // If it doesn't have a server prefix, add a default one
+                          const fullToolName = hasServerPrefix 
+                            ? toolName 
+                            : `default${SERVER_TOOL_NAME_SEPARATOR}${toolName}`;
+                          
+                          return (
+                            <ToolUseCollapsible
+                              key={index}
+                              toolCall={{
+                                type: "tool_use",
+                                content: [{
+                                  name: fullToolName,
+                                  content: "",
+                                  input: toolCall.arguments || {}
+                                }]
+                              }}
+                              toolResult={
+                                cardsContext[selectedCard.id].toolCallsResult &&
+                                cardsContext[selectedCard.id].toolCallsResult[index]
+                                  ? {
+                                      type: "tool_result",
+                                      content: [{
+                                        content: JSON.stringify(
+                                          cardsContext[selectedCard.id]
+                                            .toolCallsResult[index].response || {}
+                                        )
+                                      }]
+                                    }
+                                  : undefined
+                              }
+                              isAssistant={true}
+                            />
+                          );
+                        }
+                      )}
+                    </div>
+                  )}
+              </div>
                 <div className="flex flex-row w-full justify-end">
                   <button
                     className="bg-blue-500 text-white border-none rounded w-8 h-8 flex items-center justify-center cursor-pointer text-sm font-bold hover:bg-blue-600"

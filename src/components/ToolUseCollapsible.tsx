@@ -120,7 +120,14 @@ const ToolUseCollapsible: React.FC<ToolUseCollapsibleProps> = ({
               <pre className={`text-xs p-2 rounded overflow-auto max-h-60 ${
                 isAssistant ? "bg-gray-200" : "bg-blue-600"
               }`}>
-                {toolResult.content[0].content}
+                {(() => {
+                  try {
+                    const parsed = JSON.parse(toolResult.content[0].content);
+                    return JSON.stringify(parsed, null, 2);
+                  } catch (e) {
+                    return toolResult.content[0].content;
+                  }
+                })()}
               </pre>
             </div>
           )}

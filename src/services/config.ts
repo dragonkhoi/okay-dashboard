@@ -12,8 +12,9 @@ export interface AppConfig {
 }
 
 export interface McpServerConfig {
-  command: string;
-  args: string[];
+  command?: string;
+  sse?: string;
+  args?: string[];
   name?: string;
   env?: Record<string, string>;
   relevantAgents?: string[];
@@ -93,7 +94,7 @@ export const loadMcpServersConfig = (configPath?: string): McpServersConfig => {
       }
       
       // Process any JSON strings in args that might need parsing
-      server.args = server.args.map(arg => {
+      server.args = server.sse ? null : server.args.map(arg => {
         if (typeof arg === 'string' && arg.startsWith('"\\{') && arg.endsWith('\\}"')) {
           // This is likely a JSON string that needs to be properly parsed
           try {

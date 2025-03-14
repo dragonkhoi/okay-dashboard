@@ -219,6 +219,7 @@ Always respond in a helpful, accurate, and concise manner.`;
         .map((item: ToolUseBlock) => ({
           serverName: item.name.split(SERVER_TOOL_NAME_SEPARATOR)[0],
           toolName: item.name.split(SERVER_TOOL_NAME_SEPARATOR)[1],
+          name: item.name,
           arguments: item.input,
           id: item.id,
         }));
