@@ -44,6 +44,12 @@ export class AiAgentService {
     delete this.mcpClients[cleanServerName(serverName)];
   }
 
+  setAnthropicApiKey(apiKey: string): void {
+    this.anthropic = new Anthropic({
+      apiKey: apiKey,
+    });
+  }
+
   constructSystemPrompt(): string {
     const contextInfo = this.contextManager.getContextString();
     const contextInstructions = ` You can also store context information for future reference. When you discover important information like IDs, credentials, or preferences, suggest storing them in context with the format: "!context:set key value" at the end of your response.`;

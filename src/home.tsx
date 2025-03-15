@@ -14,207 +14,11 @@ import { cleanServerName } from "./services/utils";
 import { Agent } from "./services/swarm/agent";
 import ToolUseCollapsible from "./components/ToolUseCollapsible";
 import RecentActivity from "./components/RecentActivity";
-
-// Extend the Window interface to include our Electron API
-declare global {
-  interface Window {
-    electronAPI: {
-      // MCP Client API
-      connectMcpClient: (
-        serverConfig: {
-          command: string;
-          args: string[];
-          name?: string;
-        },
-        serverName: string
-      ) => Promise<{ success: boolean; error?: string }>;
-      disconnectMcpClient: (
-        serverName: string
-      ) => Promise<{ success: boolean; error?: string }>;
-      getMcpServers: () => Promise<{
-        success: boolean;
-        servers: Record<string, McpServerConfig>;
-        error?: string;
-      }>;
-      getConnectedClients: () => Promise<{
-        success: boolean;
-        connectedClients: string[];
-        error?: string;
-      }>;
-      onServersConnected: (callback: () => void) => () => void;
-      listMcpPrompts: () => Promise<any>;
-      getMcpPrompt: (name: string, args: Record<string, any>) => Promise<any>;
-      listMcpResources: () => Promise<any>;
-      readMcpResource: (uri: string) => Promise<any>;
-      callMcpTool: (params: {
-        serverName: string;
-        name: string;
-        arguments: Record<string, any>;
-      }) => Promise<any>;
-
-      // AI Agent API
-      runSwarm: (
-        currentAgentName: string,
-        conversationHistory: Array<{
-          role: "user" | "assistant";
-          content: string;
-        }>
-      ) => Promise<{
-        agentName: string;
-        messages: any[];
-      }>;
-      processAiMessage: (
-        message: string,
-        conversationHistory: Array<{
-          role: "user" | "assistant";
-          content: string;
-        }>
-      ) => Promise<{
-        content: string;
-        toolCalls?: Array<{ name: string; arguments: Record<string, any> }>;
-      }>;
-      processToolCalls: (
-        toolCalls: Array<{ name: string; arguments: Record<string, any> }>,
-        conversationHistory: Array<{
-          role: "user" | "assistant";
-          content: string;
-        }>
-      ) => Promise<string>;
-      callTools: (
-        toolCalls: Array<{ name: string; arguments: Record<string, any> }>
-      ) => Promise<Array<{ name: string; response: any }>>;
-      transformToolResponse: (
-        toolResponses: Array<{ name: string; response: any }>,
-        conversationHistory: Array<{
-          role: "user" | "assistant";
-          content: string;
-        }>
-      ) => Promise<string>;
-      transformToolResponseToAlert: (
-        toolResponses: Array<{ name: string; response: any }>,
-        conversationHistory: Array<{
-          role: "user" | "assistant";
-          content: string;
-        }>
-      ) => Promise<string>;
-
-      // React Component Generator API
-      registerReactComponent: (
-        componentCode: string,
-        componentName: string
-      ) => Promise<string>;
-      getReactComponent: (name: string) => Promise<{ exists: boolean }>;
-      listReactComponents: () => Promise<string[]>;
-      removeReactComponent: (name: string) => Promise<{ success: boolean }>;
-
-      // Dashboard Configuration API
-      getDashboardQuestions: () => Promise<{
-        success: boolean;
-        questions: Array<{
-          id?: number;
-          question: string;
-          additionalInstructions?: string;
-          suggestedTitle?: string;
-          suggestedType?: string;
-          customColor?: string;
-        }>;
-        error?: string;
-      }>;
-      addDashboardQuestion: (question: {
-        question: string;
-        additionalInstructions?: string;
-        suggestedTitle?: string;
-        suggestedType?: string;
-        customColor?: string;
-      }) => Promise<{
-        success: boolean;
-        question?: any;
-        error?: string;
-      }>;
-      updateDashboardQuestion: (
-        id: number,
-        question: {
-          question?: string;
-          additionalInstructions?: string;
-          suggestedTitle?: string;
-          suggestedType?: string;
-          customColor?: string;
-        }
-      ) => Promise<{
-        success: boolean;
-        question?: any;
-        error?: string;
-      }>;
-      deleteDashboardQuestion: (id: number) => Promise<{
-        success: boolean;
-        error?: string;
-      }>;
-    };
-  }
-}
+import ServerManager from "./components/ServerManager";
+import MainSidebar from "./components/MainSidebar";
+import { Button } from "./components/Button";
 
 const colors = ["#4a90e2", "#50c878", "#f4a261", "#8338ec", "#e76f51"];
-
-// ServerStatusIcon component to display server status with appropriate icon and color
-const ServerStatusIcon = ({
-  serverName,
-  status,
-  isAvailableForToolUse,
-}: {
-  serverName: string;
-  status: "connecting" | "connected" | "error";
-  isAvailableForToolUse: boolean;
-}) => {
-  // Get the server icon or use default
-  const getServerIcon = () => {
-    const serverKey = Object.keys(MCP_SERVER_ICONS).find((key) =>
-      serverName.toLowerCase().includes(key.toLowerCase())
-    );
-    return serverKey
-      ? MCP_SERVER_ICONS[serverKey]
-      : MCP_SERVER_ICONS["default"];
-  };
-
-  // Get status color
-  const getStatusColor = () => {
-    switch (status) {
-      case "connecting":
-        return "#f6e05e"; // yellow
-      case "connected":
-        return "#48bb78"; // green
-      case "error":
-        return "#f56565"; // red
-      default:
-        return "#a0aec0"; // gray
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-2 p-2 rounded hover:bg-gray-100">
-      <img
-        src={getServerIcon()}
-        alt={`${serverName} icon`}
-        className={`w-6 h-6 object-contain cursor-pointer ${
-          isAvailableForToolUse ? "" : "opacity-50"
-        }`}
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = MCP_SERVER_ICONS["default"];
-        }}
-      />
-      <div className="flex-1 text-sm font-medium truncate">{serverName}</div>
-      {
-        // only show status if server is not connected
-        status !== "connected" && (
-          <div
-            className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: getStatusColor() }}
-            title={`Status: ${status}`}
-          />
-        )
-      }
-    </div>
-  );
-};
 
 const ChatBubble = ({
   message,
@@ -429,21 +233,27 @@ export default function Home() {
 
   // Fetch Mixpanel data when connected to MCP
   useEffect(() => {
-    const fetchCardsData = async () => {
+    const fetchCardsData = async (dummy: boolean = false) => {
       // START DUMMY DATA
-      setCardsData([
-        {
-          id: 1,
-          title: "Dashboard Card 1",
-          value: 100,
-        },
-        {
-          id: 2,
-          title: "Dashboard Card 2",
-          value: 200,
-        },
-      ]);
-      return;
+      if (dummy) {
+        setCardsData([
+          {
+            id: 1,
+            title: "Dashboard Card 1",
+            value: 100,
+            caption: "This is a caption",
+            type: "NumberMetric",
+          },
+          {
+            id: 2,
+            title: "Dashboard Card 2",
+            value: "$200",
+            caption: "This is a caption",
+            type: "NumberMetric",
+          },
+        ]);
+        return;
+      }
       // END DUMMY DATA
       if (mcpConnected && dashboardQuestions.length > 0) {
         const results = await Promise.all(
@@ -453,25 +263,27 @@ export default function Home() {
       }
     };
 
-    const fetchAlertData = async () => {
+    const fetchAlertData = async (dummy: boolean = false) => {
       // START DUMMY DATA
-      setDashboardAlerts([
-        {
-          title: "Dashboard Alert 1",
-          type: "NewsAlert",
-          caption: "This is a news alert",
-          color: "#000000",
-          hero: "🚨",
-        },
-        {
-          title: "Dashboard Alert 2",
-          type: "NewsAlert",
-          caption: "This is a news alert",
-          color: "#007733",
-          hero: "$4,519",
-        },
-      ]);
-      return;
+      if (dummy) {
+        setDashboardAlerts([
+          {
+            title: "Dashboard Alert 1",
+            type: "NewsAlert",
+            caption: "This is a news alert",
+            color: "#000000",
+            hero: "🚨",
+          },
+          {
+            title: "Dashboard Alert 2",
+            type: "NewsAlert",
+            caption: "This is a news alert",
+            color: "#007733",
+            hero: "$4,519",
+          },
+        ]);
+        return;
+      }
       // END DUMMY DATA
       if (mcpConnected) {
         const result = await askAINoChat(
@@ -492,8 +304,8 @@ export default function Home() {
       }
     };
 
-    // fetchCardsData();
-    fetchAlertData();
+    fetchCardsData(true);
+    fetchAlertData(true);
   }, [mcpConnected, connectedClients, dashboardQuestions]);
 
   const loadMcpServers = async () => {
@@ -718,190 +530,6 @@ export default function Home() {
           sender: "assistant",
           type: "text",
           content: error instanceof Error ? error.message : "Unknown error",
-        },
-      ]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleConnectMcp = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    setIsProcessing(true);
-    let serverConfig: any;
-    let serverName = "";
-
-    try {
-      if (customServerMode) {
-        // Use custom server configuration
-        const args = mcpServerArgs.trim() ? mcpServerArgs.split(" ") : [];
-        serverConfig = {
-          command: mcpServerPath,
-          args,
-          name: "custom-server",
-        };
-        serverName = "custom-server";
-      } else if (selectedMcpServer && availableMcpServers[selectedMcpServer]) {
-        // Use selected server from config
-        serverConfig = availableMcpServers[selectedMcpServer];
-        serverName = selectedMcpServer;
-      } else {
-        throw new Error("No MCP server selected");
-      }
-
-      // Set server status to connecting
-      setServerConnectionStatus((prev) => ({
-        ...prev,
-        [serverName]: "connecting",
-      }));
-
-      const result = await window.electronAPI.connectMcpClient(
-        serverConfig,
-        serverName
-      );
-
-      if (result.success) {
-        setMcpConnected(true);
-
-        // Update server status to connected
-        setServerConnectionStatus((prev) => ({
-          ...prev,
-          [serverName]: "connected",
-        }));
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            text: `Successfully connected to MCP server: ${
-              serverName || serverConfig.name || "Custom server"
-            }`,
-            role: "assistant",
-            sender: "assistant",
-            type: "text",
-            content: `Successfully connected to MCP server: ${
-              serverName || serverConfig.name || "Custom server"
-            }`,
-          },
-        ]);
-
-        // Refresh the server list and connected clients
-        await loadMcpServers();
-      } else {
-        // Update server status to error
-        setServerConnectionStatus((prev) => ({
-          ...prev,
-          [serverName]: "error",
-        }));
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            text: `Failed to connect to MCP server: ${
-              result.error || "Unknown error"
-            }`,
-            role: "assistant",
-            sender: "assistant",
-            type: "text",
-            content: `Failed to connect to MCP server: ${
-              result.error || "Unknown error"
-            }`,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Error connecting to MCP server:", error);
-
-      // Update server status to error
-      if (serverName) {
-        setServerConnectionStatus((prev) => ({
-          ...prev,
-          [serverName]: "error",
-        }));
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: `Error connecting to MCP server: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-          role: "assistant",
-          sender: "assistant",
-          type: "text",
-          content: `Error connecting to MCP server: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-        },
-      ]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleDisconnectMcp = async (serverName?: string) => {
-    setIsProcessing(true);
-    try {
-      const result = await window.electronAPI.disconnectMcpClient(serverName);
-      if (result.success) {
-        // If disconnecting a specific server
-        if (serverName) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              text: `Disconnected from MCP server: ${serverName}`,
-              role: "assistant",
-              sender: "assistant",
-              type: "text",
-              content: `Disconnected from MCP server: ${serverName}`,
-            },
-          ]);
-        } else {
-          // Disconnecting all servers
-          setMessages((prev) => [
-            ...prev,
-            {
-              text: "Disconnected from all MCP servers",
-              role: "assistant",
-              sender: "assistant",
-              type: "text",
-              content: "Disconnected from all MCP servers",
-            },
-          ]);
-        }
-
-        // Refresh the server list and connected clients
-        await loadMcpServers();
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            text: `Failed to disconnect from MCP server: ${
-              result.error || "Unknown error"
-            }`,
-            role: "assistant",
-            sender: "assistant",
-            type: "text",
-            content: `Failed to disconnect from MCP server: ${
-              result.error || "Unknown error"
-            }`,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Error disconnecting from MCP server:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          text: `Error disconnecting from MCP server: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-          role: "assistant",
-          sender: "assistant",
-          type: "text",
-          content: `Error disconnecting from MCP server: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
         },
       ]);
     } finally {
@@ -1202,143 +830,11 @@ export default function Home() {
   return (
     <div className="flex h-[100vh] w-full overflow-hidden">
       <div className={`sidebar ${sidebarExpanded ? "expanded" : "collapsed"}`}>
-        <div className="sidebar-header">
-          <h2>MCP Servers</h2>
-          <button
-            className="toggle-sidebar-button"
-            onClick={() => setSidebarExpanded(!sidebarExpanded)}
-            aria-label={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
-          >
-            {sidebarExpanded ? "←" : "+"}
-          </button>
-        </div>
-
-        {/* Only render the content when sidebar is expanded */}
-        {sidebarExpanded ? (
-          <>
-            {/* Connected Servers List */}
-            <div className="server-list">
-              <div className="server-list-header">
-                <h3>Connected Servers</h3>
-                <button
-                  className="refresh-button"
-                  onClick={loadMcpServers}
-                  disabled={isProcessing}
-                >
-                  Refresh
-                </button>
-              </div>
-              {connectedClients.length > 0 ? (
-                connectedClients.map((name) => (
-                  <div key={name} className={`flex flex-col`}>
-                    <ServerStatusIcon
-                      serverName={name}
-                      status={serverConnectionStatus[name] || "connected"}
-                      isAvailableForToolUse={
-                        serverConnectionStatus[name] === "connected" && true
-                      }
-                    />
-                    <div className="flex flex-row w-full justify-end">
-                      <button
-                        onClick={() => handleDisconnectMcp(name)}
-                        disabled={isProcessing}
-                        className="server-action-button disconnect"
-                      >
-                        Disconnect
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="no-servers">No connected servers</div>
-              )}
-            </div>
-
-            {/* Connect to Server Form */}
-            {false && (
-              <form onSubmit={handleConnectMcp}>
-                <div className="form-group">
-                  <label>Custom Server</label>
-                </div>
-
-                <>
-                  <div className="form-group">
-                    <label>Command:</label>
-                    <input
-                      type="text"
-                      value={mcpServerPath}
-                      onChange={(e) => setMcpServerPath(e.target.value)}
-                      disabled={isProcessing}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Arguments:</label>
-                    <input
-                      type="text"
-                      value={mcpServerArgs}
-                      onChange={(e) => setMcpServerArgs(e.target.value)}
-                      disabled={isProcessing}
-                      placeholder="Space-separated arguments"
-                    />
-                  </div>
-                </>
-              </form>
-            )}
-          </>
-        ) : (
-          <div className="flex flex-col gap-2 p-2">
-            {Object.keys(availableMcpServers).map((serverName) => (
-              <div key={serverName} className="flex justify-center">
-                <div
-                  className="w-8 h-8 relative flex items-center justify-center"
-                  title={`${serverName}`}
-                  onClick={() => {
-                    console.log("clicked", serverName);
-                  }}
-                >
-                  <img
-                    src={(() => {
-                      const serverKey = Object.keys(MCP_SERVER_ICONS).find(
-                        (key) =>
-                          cleanServerName(serverName)
-                            .toLowerCase()
-                            .includes(key.toLowerCase())
-                      );
-                      return serverKey
-                        ? MCP_SERVER_ICONS[serverKey]
-                        : MCP_SERVER_ICONS["default"];
-                    })()}
-                    alt={serverName}
-                    className={`w-6 h-6 object-contain ${
-                      serverConnectionStatus[cleanServerName(serverName)] !==
-                      "connected"
-                        ? "opacity-10"
-                        : ""
-                    }`}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src =
-                        MCP_SERVER_ICONS["default"];
-                    }}
-                  />
-                  {serverConnectionStatus[cleanServerName(serverName)] !==
-                    "connected" && (
-                    <div
-                      className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-white"
-                      style={{
-                        backgroundColor:
-                          serverConnectionStatus[
-                            cleanServerName(serverName)
-                          ] === "connecting"
-                            ? "#f6e05e"
-                            : "#f56565",
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <MainSidebar
+          availableMcpServers={availableMcpServers}
+          connectedClients={connectedClients}
+          serverConnectionStatus={serverConnectionStatus}
+        />
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -1369,7 +865,8 @@ export default function Home() {
                   }}
                 >
                   <span>@{selectedCard.title}</span>
-                  <button
+                  <Button
+                    variant="ghost"
                     className="ml-1 text-xs hover:bg-gray-200 rounded-full h-5 w-5 flex items-center justify-center"
                     onClick={(e) => {
                       e.preventDefault();
@@ -1378,7 +875,7 @@ export default function Home() {
                     title="Clear context"
                   >
                     ×
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -1391,23 +888,25 @@ export default function Home() {
                 disabled={isProcessing || !mcpConnected}
                 className="flex-1 p-2.5 border border-gray-200 rounded mr-2 text-sm"
               />
-              <button
+              <Button
                 type="submit"
                 disabled={isProcessing || !inputValue.trim() || !mcpConnected}
                 className="px-5 py-2.5 bg-blue-500 text-white border-none rounded cursor-pointer font-medium disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-600"
               >
                 Send
-              </button>
+              </Button>
             </div>
           </form>
         </div>
 
         <div className="w-1/2 flex flex-col bg-white overflow-hidden">
-          <RecentActivity activity={{
-            emails: [],
-            calendarEvents: [],
-            alerts: dashboardAlerts
-          }} />
+          <RecentActivity
+            activity={{
+              emails: [],
+              calendarEvents: [],
+              alerts: dashboardAlerts,
+            }}
+          />
 
           {selectedCard !== null ? (
             <div className="flex flex-col h-full overflow-hidden bg-white rounded-lg shadow-md m-5">
@@ -1436,13 +935,14 @@ export default function Home() {
                   {selectedCard?.title || ""}
                 </h3>
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    variant="ghost"
                     className="bg-red-500 text-white border-none rounded w-8 h-8 flex items-center justify-center cursor-pointer text-xl font-bold hover:bg-red-600"
                     onClick={() => setSelectedCard(null)}
                     aria-label="Close zoomed card"
                   >
                     ×
-                  </button>
+                  </Button>
                 </div>
               </div>
               <div className="px-4 flex-1 overflow-auto">
@@ -1491,63 +991,74 @@ export default function Home() {
                   />
                 </div>
                 <div className="px-4">
-                {selectedCard?.id &&
-                  cardsContext[selectedCard.id]?.toolCalls &&
-                  cardsContext[selectedCard.id].toolCalls.length > 0 && (
-                    <div className="flex flex-col gap-2">
-                      <h3>Tool Usage</h3>
-                      {cardsContext[selectedCard.id].toolCalls.map(
-                        (toolCall: any, index: number) => {
-                          // Extract server name and tool name
-                          const toolName = toolCall.name || "";
-                          // Check if the tool name already contains the separator
-                          const hasServerPrefix = toolName.includes(SERVER_TOOL_NAME_SEPARATOR);
-                          // If it doesn't have a server prefix, add a default one
-                          const fullToolName = hasServerPrefix 
-                            ? toolName 
-                            : `default${SERVER_TOOL_NAME_SEPARATOR}${toolName}`;
-                          
-                          return (
-                            <ToolUseCollapsible
-                              key={index}
-                              toolCall={{
-                                type: "tool_use",
-                                content: [{
-                                  name: fullToolName,
-                                  content: "",
-                                  input: toolCall.arguments || {}
-                                }]
-                              }}
-                              toolResult={
-                                cardsContext[selectedCard.id].toolCallsResult &&
-                                cardsContext[selectedCard.id].toolCallsResult[index]
-                                  ? {
-                                      type: "tool_result",
-                                      content: [{
-                                        content: JSON.stringify(
-                                          cardsContext[selectedCard.id]
-                                            .toolCallsResult[index].response || {}
-                                        )
-                                      }]
-                                    }
-                                  : undefined
-                              }
-                              isAssistant={true}
-                            />
-                          );
-                        }
-                      )}
-                    </div>
-                  )}
-              </div>
+                  {selectedCard?.id &&
+                    cardsContext[selectedCard.id]?.toolCalls &&
+                    cardsContext[selectedCard.id].toolCalls.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        <h3>Tool Usage</h3>
+                        {cardsContext[selectedCard.id].toolCalls.map(
+                          (toolCall: any, index: number) => {
+                            // Extract server name and tool name
+                            const toolName = toolCall.name || "";
+                            // Check if the tool name already contains the separator
+                            const hasServerPrefix = toolName.includes(
+                              SERVER_TOOL_NAME_SEPARATOR
+                            );
+                            // If it doesn't have a server prefix, add a default one
+                            const fullToolName = hasServerPrefix
+                              ? toolName
+                              : `default${SERVER_TOOL_NAME_SEPARATOR}${toolName}`;
+
+                            return (
+                              <ToolUseCollapsible
+                                key={index}
+                                toolCall={{
+                                  type: "tool_use",
+                                  content: [
+                                    {
+                                      name: fullToolName,
+                                      content: "",
+                                      input: toolCall.arguments || {},
+                                    },
+                                  ],
+                                }}
+                                toolResult={
+                                  cardsContext[selectedCard.id]
+                                    .toolCallsResult &&
+                                  cardsContext[selectedCard.id].toolCallsResult[
+                                    index
+                                  ]
+                                    ? {
+                                        type: "tool_result",
+                                        content: [
+                                          {
+                                            content: JSON.stringify(
+                                              cardsContext[selectedCard.id]
+                                                .toolCallsResult[index]
+                                                .response || {}
+                                            ),
+                                          },
+                                        ],
+                                      }
+                                    : undefined
+                                }
+                                isAssistant={true}
+                              />
+                            );
+                          }
+                        )}
+                      </div>
+                    )}
+                </div>
                 <div className="flex flex-row w-full justify-end">
-                  <button
-                    className="bg-blue-500 text-white border-none rounded w-8 h-8 flex items-center justify-center cursor-pointer text-sm font-bold hover:bg-blue-600"
+                  <Button
+                    variant="secondary"
+                    className="flex items-center justify-center cursor-pointer text-sm font-bold"
                     onClick={() => handleSaveQuestion()}
                     aria-label="Save question"
                   >
                     💾
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1585,13 +1096,14 @@ export default function Home() {
                 ))}
               </div>
               <div className="w-full px-4">
-                <button
+                <Button
+                  variant="secondary"
                   onClick={handleAddQuestion}
-                  className="px-3 w-full py-1 bg-blue-500 text-white border-none rounded cursor-pointer font-medium hover:bg-blue-600"
+                  className="px-3 w-full py-1 font-medium"
                   disabled={!mcpConnected}
                 >
                   +
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1696,7 +1208,8 @@ export default function Home() {
             </div>
 
             <div className="flex justify-end gap-2">
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setShowQuestionModal(false);
                   setEditingQuestion(null);
@@ -1704,14 +1217,14 @@ export default function Home() {
                 className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleSaveQuestion}
                 className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                 disabled={!editingQuestion.question.trim()}
               >
                 Save
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,8 +1,8 @@
-import { app, BrowserWindow, ipcMain, net, session } from 'electron';
+import { app, BrowserWindow, ipcMain, net, session, shell } from 'electron';
 import { McpClientService, McpServerConfig } from './services/mcpClient';
 import { AiAgentService } from './services/aiAgent';
 import { ReactComponentGeneratorService } from './services/reactComponentGenerator';
-import { loadMcpServersConfig, config } from './services/config';
+import { loadMcpServersConfig, saveMcpServersConfig, config, saveEnvConfig } from './services/config';
 import { DashboardConfigService, DashboardQuestion } from './services/dashboardConfig';
 import * as path from 'path';
 import { cleanServerName } from './services/utils';
@@ -37,6 +37,10 @@ const agentDirectory = new AgentDirectory();
 const plannerInstructions = (contextVariables: Record<string, any>) => { 
   return `You are to triage a users request, and call a tool to transfer to the right intent.
     Once you are ready to transfer to the right intent, call the tool to transfer to the right intent.
+    Product related questions like analytics, Mixpanel, Supabase, database, etc should be transferred to the product analytics agent.
+    Money related questions like bank accounts, payments, invoices, etc should be transferred to the money agent.
+    Communication related questions like sending and reading emails, Slack messages, calendar events and scheduling, etc should be transferred to the communication agent.
+    Company knowledge related questions like company policies, procedures, company information, employees, Notion, information that might be in emails, etc should be transferred to the internal search agent.
     You dont need to know specifics, just the topic of the request.
     When you need more information to triage the request to an agent, ask a direct question without explaining why you're asking it.
     Do not share your thought process with the user! Do not make unreasonable assumptions on behalf of user.`
@@ -75,21 +79,21 @@ agentDirectory.registerAgent(PLANNER_AGENT, new Agent({
   functions: [
     {
       name: AGENT_PREFIX + SERVER_TOOL_NAME_SEPARATOR + MONEY_AGENT,
-      description: "Transfer to the banking and accounting agent",
+      description: "Transfer to the banking and accounting agent to handle money related questions like Mercury, Stripe, Ramp, credit cards, spending, invoices, etc.",
       input_schema: {
         type: "object",
       }
     },
     {
       name: AGENT_PREFIX + SERVER_TOOL_NAME_SEPARATOR + PRODUCT_ANALYTICS_AGENT,
-      description: "Transfer to the product analytics agent",
+      description: "Transfer to the product analytics agent to handle product analytics related questions like Mixpanel, Supabase, database, etc.",
       input_schema: {
         type: "object",
       }
     },
     {
       name: AGENT_PREFIX + SERVER_TOOL_NAME_SEPARATOR + EXTERNAL_SEARCH_AGENT,
-      description: "Transfer to the external search agent for web, YouTube or external tool search",
+      description: "Transfer to the external search agent to handle web, YouTube or external tool search",
       input_schema: {
         type: "object",
       }
@@ -210,6 +214,10 @@ const connectToAllMcpServers = async () => {
         for (const agentName of serverConfig.relevantAgents) {
           agentDirectory.addNewAgentFunctions(agentName, mcpClient.getAvailableTools());
         }
+      }
+      else {
+        // If no relevant agents are specified, add the tools to the planner agent
+        agentDirectory.addNewAgentFunctions(PLANNER_AGENT, mcpClient.getAvailableTools());
       }
       console.log(`Successfully connected to MCP server: ${serverName}`);
     } catch (error) {
@@ -600,6 +608,34 @@ ipcMain.handle('dashboard:deleteQuestion', async (_, id: number) => {
   }
 });
 
+// Add IPC handler for saving environment variables to .env file
+ipcMain.handle('config:saveEnvVars', async (_, envVars) => {
+  const success = saveEnvConfig(envVars);
+  
+  // If the API key was updated, update it in the services
+  if (success && envVars.ANTHROPIC_API_KEY) {
+    // Update the API key in the Swarm service
+    aiSwarmService.setAnthropicApiKey(envVars.ANTHROPIC_API_KEY);
+    
+    // Update the API key in the AI Agent service
+    aiAgentService.setAnthropicApiKey(envVars.ANTHROPIC_API_KEY);
+    
+    // Update the config object
+    config.anthropicApiKey = envVars.ANTHROPIC_API_KEY;
+  }
+  
+  // Update other config values (these will require restart to fully take effect)
+  if (success && envVars.AI_MODEL) {
+    config.aiModel = envVars.AI_MODEL;
+  }
+  
+  if (success && envVars.MAX_TOKENS) {
+    config.maxTokens = parseInt(envVars.MAX_TOKENS, 10);
+  }
+  
+  return success;
+});
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -609,6 +645,32 @@ app.on('ready', () => {
     const filePath = path.join(app.getAppPath(), '.webpack/renderer', fileUrl);
     callback(filePath);
   });
+  
+  // Handle opening external links in default browser
+  ipcMain.handle('open-external-link', async (_, url) => {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to open external link:', error);
+      return { success: false, error: error.message };
+    }
+  });
+  
+  // Add IPC handlers for MCP server configuration
+  ipcMain.handle('config:loadMcpServers', async () => {
+    return loadMcpServersConfig();
+  });
+
+  ipcMain.handle('config:saveMcpServers', async (_, config) => {
+    return saveMcpServersConfig(config);
+  });
+  
+  // Add IPC handler for getting app configuration
+  ipcMain.handle('config:getAppConfig', async () => {
+    return config;
+  });
+  
   createWindow();
 });
 

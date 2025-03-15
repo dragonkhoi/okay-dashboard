@@ -93,6 +93,7 @@ out/
 
 # MCP Servers
 mcp-servers.json
+mcp-servers-backup.json
 
 # Dashboard Config
 dashboard-config.json

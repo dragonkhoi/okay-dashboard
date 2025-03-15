@@ -3,12 +3,13 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { Agent } from './services/swarm/agent';
+import { McpServerConfig } from './services/mcpClient';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
   // MCP Client API
-  connectMcpClient: (serverConfig: { command: string; args: string[]; name?: string }, serverName?: string) => 
+  connectMcpClient: (serverConfig: McpServerConfig, serverName?: string) => 
     ipcRenderer.invoke('mcp:connect', serverConfig, serverName),
   disconnectMcpClient: (serverName?: string) => 
     ipcRenderer.invoke('mcp:disconnect', serverName),
@@ -34,6 +35,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('mcp:readResource', uri, serverName),
   callMcpTool: (params: { serverName: string, name: string; arguments: Record<string, any> }) => 
     ipcRenderer.invoke('mcp:callTool', params),
+  
+  // External link handling
+  openExternalLink: (url: string) => 
+    ipcRenderer.invoke('open-external-link', url),
   
   // AI Agent API
   runSwarm: (currentAgentName: string, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>) => 
@@ -62,22 +67,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Dashboard Configuration API
   getDashboardQuestions: () =>
     ipcRenderer.invoke('dashboard:getQuestions'),
-  addDashboardQuestion: (question: { 
-    question: string; 
-    additionalInstructions?: string; 
-    suggestedTitle?: string; 
-    suggestedType?: string; 
-    customColor?: string; 
-  }) =>
-    ipcRenderer.invoke('dashboard:addQuestion', question),
-  updateDashboardQuestion: (id: number, question: { 
-    question?: string; 
-    additionalInstructions?: string; 
-    suggestedTitle?: string; 
-    suggestedType?: string; 
-    customColor?: string; 
-  }) =>
-    ipcRenderer.invoke('dashboard:updateQuestion', id, question),
-  deleteDashboardQuestion: (id: number) =>
-    ipcRenderer.invoke('dashboard:deleteQuestion', id),
+  saveDashboardQuestions: (questions: Array<any>) =>
+    ipcRenderer.invoke('dashboard:saveQuestions', questions),
+  
+  // Config API
+  loadMcpServersConfig: () =>
+    ipcRenderer.invoke('config:loadMcpServers'),
+  saveMcpServersConfig: (config: any) =>
+    ipcRenderer.invoke('config:saveMcpServers', config),
+  saveEnvConfig: (envVars: Record<string, string>) =>
+    ipcRenderer.invoke('config:saveEnvVars', envVars),
+  getAppConfig: () =>
+    ipcRenderer.invoke('config:getAppConfig'),
 });

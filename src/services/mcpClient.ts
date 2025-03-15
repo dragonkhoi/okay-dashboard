@@ -20,6 +20,7 @@ export interface McpServerConfig {
   name?: string;
   connected?: boolean;
   env?: Record<string, string>;
+  relevantAgents?: string[];
 }
 
 export interface MCPTool {
