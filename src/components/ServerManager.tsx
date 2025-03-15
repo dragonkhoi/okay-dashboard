@@ -240,27 +240,9 @@ const ServerManager: React.FC<ServerManagerProps> = ({
 
   return (
     <div>
-      {/* Connected Servers List */}
-      <div className="server-list max-h-[calc(100vh-100px)] overflow-y-auto">
-        {connectedClients.length > 0 ? (
-          connectedClients.map((name) => (
-            <div key={name} className={`flex flex-col`}>
-              <ServerStatusIcon
-                serverName={name}
-                status={serverConnectionStatus[name] || "connected"}
-                isAvailableForToolUse={
-                  serverConnectionStatus[name] === "connected" && true
-                }
-              />
-            </div>
-          ))
-        ) : (
-          <div className="no-servers">No connected servers</div>
-        )}
-      </div>
       <Dialog>
         <DialogTrigger asChild>
-          <Button variant="outline">Add Connection +</Button>
+          <Button variant="outline" className="my-2">Add Connection +</Button>
         </DialogTrigger>
         <DialogContent className="max-h-[calc(100vh-100px)] overflow-y-auto">
           <DialogHeader>
@@ -282,12 +264,17 @@ const ServerManager: React.FC<ServerManagerProps> = ({
                 </Button>
               )}
               <div className="flex flex-row items-center gap-1">
-                <img
-                  src={selectedServer.icon}
-                  alt={selectedServer.name}
-                  className="size-4"
-                />
+                <div className="flex items-center justify-center w-6 h-6">
+                  <img
+                    src={selectedServer.icon}
+                    alt={selectedServer.name}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
                 <div className="text-xl font-bold">{selectedServer.name}</div>
+              </div>
+              <div className="text-sm text-gray-500 my-2">
+                {selectedServer.installInstructions}
               </div>
               {selectedServer.configArgNames && (
                 <div>
@@ -386,9 +373,11 @@ const ServerManager: React.FC<ServerManagerProps> = ({
                       <img
                         src={availableServer.icon}
                         alt={availableServer.name}
-                        className="w-10 h-10"
+                        className="w-10 h-10 object-contain"
                       />
-                      <div className="text-sm text-gray-500">{availableServer.name}</div>
+                      <div className="text-sm text-gray-500">
+                        {availableServer.name}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -414,19 +403,19 @@ const ServerManager: React.FC<ServerManagerProps> = ({
                     <div id="type" className="col-span-3">
                       <Select
                         value={selectedType}
-                      onValueChange={(value) =>
-                        setSelectedType(value as "command" | "sse")
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="command">Command</SelectItem>
-                        <SelectItem value="sse">SSE</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                        onValueChange={(value) =>
+                          setSelectedType(value as "command" | "sse")
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="command">Command</SelectItem>
+                          <SelectItem value="sse">SSE</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   {selectedType === "command" && (
                     <>
@@ -500,6 +489,24 @@ const ServerManager: React.FC<ServerManagerProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Connected Servers List */}
+      <div className="server-list max-h-[calc(100vh-100px)] overflow-y-auto">
+        {connectedClients.length > 0 ? (
+          connectedClients.map((name) => (
+            <div key={name} className={`flex flex-col`}>
+              <ServerStatusIcon
+                serverName={name}
+                status={serverConnectionStatus[name] || "connected"}
+                isAvailableForToolUse={
+                  serverConnectionStatus[name] === "connected" && true
+                }
+              />
+            </div>
+          ))
+        ) : (
+          <div className="no-servers">No connected servers</div>
+        )}
+      </div>
     </div>
   );
 };
