@@ -230,7 +230,7 @@ const ServerManager: React.FC<ServerManagerProps> = ({
             }
             config.mcpServers[uniqueServerName] = serverConfig;
             api.saveMcpServersConfig(config);
-            alert("Server added successfully");
+            alert("Server added successfully, connecting...");
             // Connect to new client
             window.electronAPI.connectMcpClient(serverConfig, uniqueServerName);
           }

@@ -9,7 +9,7 @@ import { McpServerConfig } from './services/mcpClient';
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
   // MCP Client API
-  connectMcpClient: (serverConfig: McpServerConfig, serverName?: string) => 
+  connectMcpClient: (serverConfig: McpServerConfig, serverName: string) => 
     ipcRenderer.invoke('mcp:connect', serverConfig, serverName),
   disconnectMcpClient: (serverName?: string) => 
     ipcRenderer.invoke('mcp:disconnect', serverName),

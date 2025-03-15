@@ -140,16 +140,12 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [mcpConnected, setMcpConnected] = useState(false);
-  const [mcpServerPath, setMcpServerPath] = useState("npx");
-  const [mcpServerArgs, setMcpServerArgs] = useState("");
   const [currentAgentName, setCurrentAgentName] =
     useState<string>(PLANNER_AGENT);
   const [availableMcpServers, setAvailableMcpServers] = useState<
     Record<string, any>
   >({});
   const [connectedClients, setConnectedClients] = useState<string[]>([]);
-  const [selectedMcpServer, setSelectedMcpServer] = useState<string>("");
-  const [customServerMode, setCustomServerMode] = useState(false);
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [cardsData, setCardsData] = useState<any[]>([]);
@@ -304,25 +300,12 @@ export default function Home() {
       }
     };
 
-    fetchCardsData(true);
-    fetchAlertData(true);
+    fetchCardsData(false);
+    // fetchAlertData(false);
   }, [mcpConnected, connectedClients, dashboardQuestions]);
 
   const loadMcpServers = async () => {
     try {
-      // Get available servers from config
-      const result = await window.electronAPI.getMcpServers();
-      if (result.success && result.servers) {
-        console.log("result.servers", result.servers);
-        setAvailableMcpServers(result.servers);
-
-        // If there are servers available, select the first one by default
-        const serverNames = Object.keys(result.servers);
-        if (serverNames.length > 0) {
-          setSelectedMcpServer((prev) => prev || serverNames[0]);
-        }
-      }
-
       // Get connected clients
       const clientsResult = await window.electronAPI.getConnectedClients();
       if (clientsResult.success && clientsResult.connectedClients) {
@@ -335,7 +318,7 @@ export default function Home() {
         > = {};
 
         // First, mark all available servers as not connected
-        Object.keys(availableMcpServers).forEach((serverName) => {
+        Object.keys(clientsResult.connectedClients).forEach((serverName) => {
           newConnectionStatus[serverName] = "error";
         });
 
@@ -397,12 +380,12 @@ export default function Home() {
         ...prev,
         [questionId]: {
           aiResponse: response.content,
-          toolCalls: response.toolCalls.map((toolCall) => {
+          toolCalls: response.toolCalls ? response.toolCalls.map((toolCall) => {
             return {
               name: toolCall.name,
               arguments: toolCall.arguments,
             };
-          }),
+          }) : [],
           toolCallsResult: toolCallsResult,
         },
       }));
@@ -831,7 +814,6 @@ export default function Home() {
     <div className="flex h-[100vh] w-full overflow-hidden">
       <div className={`sidebar ${sidebarExpanded ? "expanded" : "collapsed"}`}>
         <MainSidebar
-          availableMcpServers={availableMcpServers}
           connectedClients={connectedClients}
           serverConnectionStatus={serverConnectionStatus}
         />

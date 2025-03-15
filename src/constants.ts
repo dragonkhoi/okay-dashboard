@@ -2,7 +2,9 @@ export const AI_RESPONSE_PREPEND = `{"requiresMCPTools":`;
 export const SERVER_TOOL_NAME_SEPARATOR = "___";
 export const MCP_SERVER_ICONS: Record<string, string> = {
   "dragonkhoi-mercury-mcp": "static://assets/mercury-logo.svg",
+  "mercury": "static://assets/mercury-logo.svg",
   "dragonkhoi-mixpanel-mcp": "static://assets/mixpanel-logo.png",
+  "mixpanel": "static://assets/mixpanel-logo.png",
   notion: "static://assets/notion-logo.png",
   supabase: "static://assets/supabase-logo.png",
   ramp: "static://assets/ramp-logo.png",

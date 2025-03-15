@@ -24,6 +24,10 @@ export interface McpServersConfig {
   mcpServers: Record<string, McpServerConfig>;
 }
 
+const DEFAULT_MCP_SERVERS_CONFIG: McpServersConfig = {
+  mcpServers: {},
+};
+
 // Get the app's root directory
 export const getAppRoot = (): string => {
   // In development, use the current directory
@@ -120,8 +124,9 @@ export const loadMcpServersConfig = (
     const filePath = configPath || path.join(appRoot, "mcp-servers.json");
 
     if (!fs.existsSync(filePath)) {
-      console.warn(`MCP servers config file not found at ${filePath}`);
-      return { mcpServers: {} };
+      console.warn(`MCP servers config file not found at ${filePath}, creating default config`);
+      saveMcpServersConfig(DEFAULT_MCP_SERVERS_CONFIG);
+      return DEFAULT_MCP_SERVERS_CONFIG;
     }
 
     const fileContent = fs.readFileSync(filePath, "utf-8");

@@ -97,6 +97,7 @@ mcp-servers-backup.json
 
 # Dashboard Config
 dashboard-config.json
+dashboard-config-backup.json
 
 # Agent Context
 data/agent-context.json

@@ -16,7 +16,12 @@ export class AgentDirectory {
     }
 
     public addNewAgentFunctions(name: string, functions: AgentFunction[]) {
-        this.agents[name].functions = [...this.agents[name].functions, ...functions];
-        console.log(`Added ${functions.length} functions to ${name}`);
+        // make sure there are no duplicate function names
+        const existingFunctions = this.agents[name].functions;
+        const newFunctions = functions.filter(
+            (func) => !existingFunctions.some((f) => f.name === func.name)
+        );
+        this.agents[name].functions = [...existingFunctions, ...newFunctions];
+        console.log(`Added ${newFunctions.length} functions to ${name}`);
     }
 }

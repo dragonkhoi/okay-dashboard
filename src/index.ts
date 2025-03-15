@@ -201,15 +201,16 @@ const connectToAllMcpServers = async () => {
   
   console.log(`Found ${serverNames.length} MCP servers in configuration`);
   
-  for (const serverName of serverNames) {
+  await Promise.all(serverNames.map(async (serverName) => {
     try {
       const serverConfig = serverConfigs[serverName];
       console.log(`Connecting to MCP server: ${serverName}`);
       
       const mcpClient = new McpClientService(serverConfig);
+      mcpClientServices[cleanServerName(serverName)] = mcpClient;
       await mcpClient.connect();
       
-      mcpClientServices[cleanServerName(serverName)] = mcpClient;
+      
       if (serverConfig.relevantAgents) {
         for (const agentName of serverConfig.relevantAgents) {
           agentDirectory.addNewAgentFunctions(agentName, mcpClient.getAvailableTools());
@@ -223,7 +224,7 @@ const connectToAllMcpServers = async () => {
     } catch (error) {
       console.error(`Failed to connect to MCP server ${serverName}:`, error);
     }
-  }
+  }));
   
   // Register all connected clients with the AI agent
   const connectedClients = Object.values(mcpClientServices);
@@ -263,7 +264,7 @@ const createWindow = (): void => {
 };
 
 // Set up IPC handlers for MCP client
-ipcMain.handle('mcp:connect', async (_, serverConfig: McpServerConfig, serverName?: string) => {
+ipcMain.handle('mcp:connect', async (_, serverConfig: McpServerConfig, serverName: string) => {
 
   const cleanedServerName = cleanServerName(serverName);
   try {
@@ -276,15 +277,32 @@ ipcMain.handle('mcp:connect', async (_, serverConfig: McpServerConfig, serverNam
     
     // Otherwise create a new client
     const mcpClient = new McpClientService(serverConfig);
-    await mcpClient.connect();
-    
+     
     // If serverName is provided, store the client with that name
-    if (serverName) {
+    if (cleanedServerName) {
       mcpClientServices[cleanedServerName] = mcpClient;
+    } else if (serverConfig.name) {
+      mcpClientServices[cleanServerName(serverConfig.name)] = mcpClient;
+    }
+    
+    await mcpClient.connect();
+   
+
+    if (serverConfig.relevantAgents) {
+      for (const agentName of serverConfig.relevantAgents) {
+        agentDirectory.addNewAgentFunctions(agentName, mcpClient.getAvailableTools());
+      }
+    }
+    else {
+      // If no relevant agents are specified, add the tools to the planner agent
+      agentDirectory.addNewAgentFunctions(PLANNER_AGENT, mcpClient.getAvailableTools());
     }
     
     aiAgentService.registerMcpClient(mcpClient);
     aiSwarmService.registerMcpClient(mcpClient);
+    if (mainWindow) {
+      mainWindow.webContents.send('mcp:serversConnected');
+    }
     return { success: true, serverName };
   } catch (error) {
     console.error('Failed to connect MCP client:', error);

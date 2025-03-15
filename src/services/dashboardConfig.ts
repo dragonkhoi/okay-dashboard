@@ -17,22 +17,6 @@ export interface DashboardConfig {
 
 const DEFAULT_CONFIG: DashboardConfig = {
   questions: [
-    {
-      id: 1,
-      question: "How many daily active users do I have?",
-      additionalInstructions: "Use something like this: // Get today and yesterday dates in YYYY-MM-DD format\nconst today = new Date().toISOString().split('T')[0];\nconst yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];",
-      suggestedTitle: "DAU",
-      suggestedType: "NumberMetric",
-      customColor: "#4a90e2",
-    },
-    {
-      id: 2,
-      question: "How much money do I have across both bank account and treasury?",
-      additionalInstructions: "Call the tools at the same time",
-      suggestedTitle: "Cash Balance",
-      suggestedType: "NumberMetric",
-      customColor: "#50c878",
-    }
   ]
 };
 

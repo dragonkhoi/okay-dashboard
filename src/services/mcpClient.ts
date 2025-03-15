@@ -50,6 +50,10 @@ export class McpClientService {
     return this.serverConfig.name;
   }
 
+  public getIsConnected() {
+    return this.isConnected;
+  }
+
   async connect(): Promise<void> {
     if (this.isConnected) {
       console.log("MCP client already connected");

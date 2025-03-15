@@ -11,12 +11,10 @@ import { Input } from "./Input";
 import SettingsSheet from "./SettingsSheet";
 
 interface MainSidebarProps {
-  availableMcpServers: Record<string, McpServerConfig>;
   connectedClients: string[];
   serverConnectionStatus: Record<string, "connecting" | "connected" | "error">;
 }
 const MainSidebar: React.FC<MainSidebarProps> = ({
-  availableMcpServers,
   connectedClients,
   serverConnectionStatus,
 }) => {
@@ -39,7 +37,7 @@ const MainSidebar: React.FC<MainSidebarProps> = ({
             />
           </SheetContent>
         </Sheet>
-        {Object.keys(availableMcpServers).map((serverName) => (
+        {connectedClients.map((serverName) => (
           <div key={serverName} className="flex justify-center">
             <div
               className="w-8 h-8 relative flex items-center justify-center"
