@@ -625,8 +625,8 @@ export class Swarm {
               toolUseBlock.name +
               SERVER_TOOL_NAME_SEPARATOR +
               COMPLETED_HANDOFF +
-              " Now please continue with my request: " +
-              (toolUseBlock.input as any).user_request || " Please continue",
+              "\nIgnore that agent handoff line above and Now please continue with my request <user_request>" +
+              (toolUseBlock.input as any).user_request || " Check my previous request in the prior messages" + "</user_request>", 
             tool_use_id: toolUseBlock.id,
           },
         ],
