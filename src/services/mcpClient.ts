@@ -116,22 +116,33 @@ export class McpClientService {
       toolName: string;
       arguments: Record<string, any>;
     },
-    retryCount = 0
+    retryCount = 0,
+    useExtendedTimeout = false
   ): Promise<any> {
     const MAX_RETRIES = 3;
     const RETRY_DELAY = 1000;
+    // Increase the timeout for long-running operations
+    const DEFAULT_TOOL_TIMEOUT = 60000; // 1 minute (default)
+    const EXTENDED_TOOL_TIMEOUT = 300000; // 5 minutes (for long-running operations)
+    
+    // Use extended timeout if requested
+    const TOOL_TIMEOUT = useExtendedTimeout ? EXTENDED_TOOL_TIMEOUT : DEFAULT_TOOL_TIMEOUT;
 
     try {
       console.log(
         `Using tool: ${params.toolName} from server: ${
           params.serverName
-        } with args: ${JSON.stringify(params.arguments)}`
+        } with args: ${JSON.stringify(params.arguments)}${useExtendedTimeout ? ' (with extended timeout)' : ''}`
       );
 
-      const response = await this.client.callTool({
-        name: params.toolName,
-        arguments: params.arguments,
-      });
+      const response = await this.client.callTool(
+        {
+          name: params.toolName,
+          arguments: params.arguments,
+        },
+        undefined, // Use default result schema
+        { timeout: TOOL_TIMEOUT } // Set custom timeout
+      );
       console.log("Received response:", JSON.stringify(response, null, 2));
 
       if (response.isError) {
@@ -178,7 +189,7 @@ export class McpClientService {
             `Retrying tool call (attempt ${retryCount + 1}/${MAX_RETRIES})...`
           );
           await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-          return this.callTool(params, retryCount + 1);
+          return this.callTool(params, retryCount + 1, useExtendedTimeout);
         }
 
         // If it's a 500 error but we're out of retries, throw a more specific error

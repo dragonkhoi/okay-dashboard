@@ -2,7 +2,7 @@ import {
   cleanServerName,
   snakeCaseToCapitalizedReadable,
 } from "../services/utils";
-import { MCP_SERVER_DATA, MCP_SERVER_ICONS } from "../constants";
+import { MCP_SERVER_DATA, MCP_SERVER_ICONS, SERVER_TOOL_NAME_SEPARATOR } from "../constants";
 import { McpServerConfig } from "../services/mcpClient";
 import { Button } from "./Button";
 import {
@@ -77,6 +77,7 @@ const ServerManager: React.FC<ServerManagerProps> = ({
   const [envString, setEnvString] = useState<string>("");
   const [customSSEUrl, setCustomSSEUrl] = useState<string>("");
   const [inputtedServerName, setInputtedServerName] = useState<string>("");
+  const [newConnectionDialogOpen, setNewConnectionDialogOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const servers = MCP_SERVER_DATA.map((server) => ({
@@ -98,7 +99,7 @@ const ServerManager: React.FC<ServerManagerProps> = ({
     setAvailableServers(servers);
   }, []);
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (verifiedOrCustom === "verified") {
       console.log("SELECTED VERIFIED SERVER");
       if (selectedServer) {
@@ -191,6 +192,10 @@ const ServerManager: React.FC<ServerManagerProps> = ({
         serverConfig.relevantAgents = selectedServer.relevantAgents;
       }
     } else if (verifiedOrCustom === "custom") {
+      if (inputtedServerName.includes(SERVER_TOOL_NAME_SEPARATOR)) {
+        alert("Server name cannot include " + SERVER_TOOL_NAME_SEPARATOR);
+        return;
+      }
       if (selectedType === "command") {
         serverConfig.command = command.split(" ")[0];
         serverConfig.args = command.split(" ").slice(1);
@@ -209,38 +214,48 @@ const ServerManager: React.FC<ServerManagerProps> = ({
     console.log("SERVER CONFIG", serverConfig);
     // save to config file using IPC
     const serverName = cleanServerName(
-      selectedServer?.name ||
-        inputtedServerName ||
+      // use the key which is dashed case, name is the human readable name
+      (selectedServer ? selectedServer.key :
+        (inputtedServerName ||
         "newmcp" +
-          Date.now().toString().split("").reverse().join("").slice(0, 10)
+          Date.now().toString().split("").reverse().join("").slice(0, 10)))
     );
 
     // Use type assertion to access the electronAPI methods
     const api = window.electronAPI as any;
-    api
-      .loadMcpServersConfig()
-      .then(
-        (config: { mcpServers: Record<string, McpServerConfig> } | null) => {
-          if (config) {
-            let i = 1;
-            let uniqueServerName = serverName;
-            while (config.mcpServers[uniqueServerName]) {
-              uniqueServerName = `${serverName}_${i}`;
-              i++;
-            }
-            config.mcpServers[uniqueServerName] = serverConfig;
-            api.saveMcpServersConfig(config);
-            alert("Server added successfully, connecting...");
-            // Connect to new client
-            window.electronAPI.connectMcpClient(serverConfig, uniqueServerName);
-          }
+    try {
+      const config = await api.loadMcpServersConfig();
+      if (config) {
+        let i = 1;
+        let uniqueServerName = serverName;
+        while (config.mcpServers[uniqueServerName]) {
+          uniqueServerName = `${serverName}_${i}`;
+          i++;
         }
-      );
+        config.mcpServers[uniqueServerName] = serverConfig;
+        await api.saveMcpServersConfig(config);
+        alert("Server added successfully, connecting...");
+        
+        // Connect to new client and wait for the response
+        const connectResult = await api.connectMcpClient(serverConfig, uniqueServerName);
+        
+        if (connectResult.success) {
+          console.log("Successfully connected to server:", uniqueServerName);
+          setNewConnectionDialogOpen(false);
+        } else {
+          console.error("Failed to connect to server:", connectResult.error);
+          alert(`Failed to connect to server: ${connectResult.error}`);
+        }
+      }
+    } catch (error) {
+      console.error("Error connecting to server:", error);
+      alert(`Error connecting to server: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   return (
     <div>
-      <Dialog>
+      <Dialog open={newConnectionDialogOpen} onOpenChange={setNewConnectionDialogOpen}>
         <DialogTrigger asChild>
           <Button variant="outline" className="my-2">Add Connection +</Button>
         </DialogTrigger>
@@ -504,7 +519,7 @@ const ServerManager: React.FC<ServerManagerProps> = ({
             </div>
           ))
         ) : (
-          <div className="no-servers">No connected servers</div>
+          <div className="no-servers">No connections, add one to get started!</div>
         )}
       </div>
     </div>

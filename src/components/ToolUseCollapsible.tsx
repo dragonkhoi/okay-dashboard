@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { AGENT_PREFIX, MCP_SERVER_ICONS, SERVER_TOOL_NAME_SEPARATOR } from "../constants";
+import { parseLinksInContent } from "../services/utils";
 
 interface ToolUseCollapsibleProps {
   toolCall: {
@@ -123,9 +124,14 @@ const ToolUseCollapsible: React.FC<ToolUseCollapsibleProps> = ({
                 {(() => {
                   try {
                     const parsed = JSON.parse(toolResult.content[0].content);
+                    // Check if the parsed result is a string that might contain links
+                    if (typeof parsed === 'string') {
+                      return parseLinksInContent(parsed);
+                    }
                     return JSON.stringify(parsed, null, 2);
                   } catch (e) {
-                    return toolResult.content[0].content;
+                    // If it's not JSON, it might be a string with links
+                    return parseLinksInContent(toolResult.content[0].content);
                   }
                 })()}
               </pre>

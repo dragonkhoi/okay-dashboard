@@ -22,6 +22,7 @@ export interface AiAgentResponse {
 
 export class AiAgentService {
   private anthropic: Anthropic;
+  private anthropicApiKey: string;
   private mcpClients: Record<string, McpClientService> = {};
   private model: string;
   private maxTokens: number;
@@ -31,6 +32,7 @@ export class AiAgentService {
     this.anthropic = new Anthropic({
       apiKey: config.apiKey,
     });
+    this.anthropicApiKey = config.apiKey;
     this.model = config.model || "claude-3-5-sonnet-20240620";
     this.maxTokens = config.maxTokens || 4096;
     this.contextManager = new ContextManager();
@@ -88,6 +90,9 @@ export class AiAgentService {
     toolResponses: Array<{ name: string; response: any }>,
     conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
   ): Promise<string> {
+    if (!this.anthropicApiKey) {
+      return "No Anthropic API key found, add one in Settings";
+    }
     // Prepare the system prompt with MCP tool instructions
     const systemPrompt = `${this.constructSystemPrompt()} From the tool response: ${JSON.stringify(
       toolResponses
@@ -97,6 +102,10 @@ export class AiAgentService {
       Example: {"type": "NewsAlert", "title": "Usage Spike", "hero": "+126%", "caption": "Your usage has spiked by 126% today", "color": "#50C879"}
 
       Caption should be a string that describes the metric in a concise manner, less than 60 characters, be as information dense for a CEO as possible.
+
+      If there is no available business data due to no tools being available, tell the CEO to connect their tools: 
+      Example: {"type": "NewsAlert", "title": "No Connection", "hero": "🔌", "caption": "Add connections in top left corner", "color": "#f56565"}
+
       Respond only with the JSON object, nothing else.
     `;
 
@@ -126,6 +135,9 @@ export class AiAgentService {
     toolResponses: Array<{ name: string; response: any }>,
     conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
   ): Promise<string> {
+    if (!this.anthropicApiKey) {
+      return "No Anthropic API key found, add one in Settings";
+    }
     // Prepare the system prompt with MCP tool instructions
     const systemPrompt = `${this.constructSystemPrompt()} From the tool response: ${JSON.stringify(
       toolResponses
@@ -170,8 +182,12 @@ export class AiAgentService {
       return this.handleContextCommand(message);
     }
 
-    if (Object.keys(this.mcpClients).length === 0) {
-      throw new Error("No MCP clients registered");
+    if (!this.anthropicApiKey) {
+// Return 
+      return {
+        content: "No Anthropic API key found, add one in Settings",
+        toolCalls: undefined,
+      };
     }
 
     try {
@@ -268,6 +284,10 @@ Always respond in a helpful, accurate, and concise manner.`;
     }>,
     conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
   ) {
+    if (!this.anthropicApiKey) {
+      return "No Anthropic API key found, add one in Settings";
+    }
+
     if (Object.keys(this.mcpClients).length === 0) {
       throw new Error("No MCP clients registered");
     }
@@ -331,6 +351,13 @@ Always respond in a helpful, accurate, and concise manner.`;
     }
 
     try {
+      // Special handling for browser agent which needs a longer timeout
+      if (toolCall.toolName === "run_browser_agent") {
+        console.log("Using extended timeout for run_browser_agent tool");
+        // Pass a custom timeout option for this specific tool
+        return await this.mcpClients[toolCall.serverName].callTool(toolCall, 0, true);
+      }
+      
       return await this.mcpClients[toolCall.serverName].callTool(toolCall);
     } catch (error) {
       console.error(

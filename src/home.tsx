@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import "./home.css";
 import DynamicComponent from "./components/DynamicComponent";
 import { McpServerConfig } from "./services/mcpClient";
@@ -10,7 +10,7 @@ import {
   PLANNER_AGENT,
   SERVER_TOOL_NAME_SEPARATOR,
 } from "./constants";
-import { cleanServerName } from "./services/utils";
+import { cleanServerName, filterMessageContent, parseLinksInContent } from "./services/utils";
 import { Agent } from "./services/swarm/agent";
 import ToolUseCollapsible from "./components/ToolUseCollapsible";
 import RecentActivity from "./components/RecentActivity";
@@ -47,7 +47,7 @@ const ChatBubble = ({
             : "self-start bg-gray-100 text-gray-800"
         }`}
       >
-        <pre>{message.content}</pre>
+        <pre>{parseLinksInContent(filterMessageContent(message.content))}</pre>
       </div>
     );
   }
@@ -56,7 +56,7 @@ const ChatBubble = ({
     if (message.content[0].name.startsWith(AGENT_PREFIX)) {
       return (
         <p
-          className={`p-3 rounded-lg max-w-[80%] break-words whitespace-pre-wrap ${
+          className={`p-3 rounded-lg max-w-[80%] break-words text-sm whitespace-pre-wrap ${
             message.role === "user"
               ? "self-end bg-blue-500 text-white"
               : "self-start bg-gray-100 text-gray-800"
@@ -94,7 +94,18 @@ const ChatBubble = ({
       >
         <div className="text-xs font-medium mb-1 opacity-70">Tool Result:</div>
         <pre className="text-xs bg-gray-200 p-2 rounded overflow-auto max-h-60">
-          {JSON.stringify(message.content, null, 2)}
+          {(() => {
+            try {
+              const content = JSON.stringify(message.content, null, 2);
+              // Check if the content might contain links
+              if (content.includes('http') || content.includes('file:') || content.includes(':/')) {
+                return parseLinksInContent(content);
+              }
+              return content;
+            } catch (e) {
+              return JSON.stringify(message.content);
+            }
+          })()}
         </pre>
       </div>
     );
@@ -115,7 +126,7 @@ const ChatBubble = ({
       }`}
     >
       {typeof message.content === "string"
-        ? message.content
+        ? parseLinksInContent(filterMessageContent(message.content))
         : JSON.stringify(message.content)}
     </div>
   );
@@ -128,6 +139,7 @@ export default function Home() {
       content: any;
       sender: string;
       type: "text" | "tool_use" | "tool_result";
+      wasStreamed?: boolean;
     }>
   >([
     {
@@ -142,14 +154,21 @@ export default function Home() {
   const [mcpConnected, setMcpConnected] = useState(false);
   const [currentAgentName, setCurrentAgentName] =
     useState<string>(PLANNER_AGENT);
-  const [availableMcpServers, setAvailableMcpServers] = useState<
-    Record<string, any>
-  >({});
   const [connectedClients, setConnectedClients] = useState<string[]>([]);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [cardsData, setCardsData] = useState<any[]>([]);
+  const [alertsData, setAlertsData] = useState<any[]>([]);
   const [cardsContext, setCardsContext] = useState<
+    Record<
+      number,
+      {
+        aiResponse: string;
+        toolCalls: Array<{ name: string; arguments: Record<string, any> }>;
+        toolCallsResult: Array<{ name: string; response: any }>;
+      }
+    >
+  >({});
+  const [alertsContext, setAlertsContext] = useState<
     Record<
       number,
       {
@@ -171,11 +190,11 @@ export default function Home() {
   >([]);
   const [dashboardAlerts, setDashboardAlerts] = useState<
     Array<{
-      title: string;
-      type: "NewsAlert";
-      caption: string;
-      color: string;
-      hero: string;
+      id?: number;
+      question: string;
+      additionalInstructions?: string;
+      suggestedType?: "NewsAlert";
+      customColor?: string;
     }>
   >([]);
   const [serverConnectionStatus, setServerConnectionStatus] = useState<
@@ -190,29 +209,222 @@ export default function Home() {
     suggestedType: string;
     customColor: string;
   } | null>(null);
+  const [isRefreshingDashboard, setIsRefreshingDashboard] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const refreshRecentActivity = useCallback(async () => {
+    setIsRefreshingDashboard(true);
+    const result = await window.electronAPI.getDashboardConfig();
+    if (result.success && result.config) {
+      setDashboardQuestions(result.config.questions);
+      setDashboardAlerts(result.config.alerts);
+    } else {
+      console.error("Failed to load dashboard config:", result.error);
+    }
+  }, []);
+
+  const askAINoChat = useCallback(
+    async (message: string, questionId?: number, alert?: boolean) => {
+      const response = await window.electronAPI.processAiMessage(message, []);
+      let toolCallsResult: Array<{ name: string; response: any }> | undefined;
+      console.log("tool calls", response.toolCalls);
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        const toolCallsResponse = await window.electronAPI.callTools(
+          response.toolCalls
+        );
+        toolCallsResult = toolCallsResponse;
+      }
+
+      const result = response.content + "\n\n" + toolCallsResult;
+      console.log("askAINoChat result", result);
+      if (questionId) {
+        if (!alert) {
+          // Update the context with the new data
+          setCardsContext((prev) => ({
+            ...prev,
+            [questionId]: {
+              aiResponse: response.content,
+              toolCalls: response.toolCalls
+                ? response.toolCalls.map((toolCall) => {
+                    return {
+                      name: toolCall.name,
+                      arguments: toolCall.arguments,
+                    };
+                  })
+                : [],
+              toolCallsResult: toolCallsResult,
+            },
+          }));
+        } else if (alert) {
+          // Update the context with the new data
+          setAlertsContext((prev) => ({
+            ...prev,
+            [questionId]: {
+              aiResponse: response.content,
+              toolCalls: response.toolCalls
+                ? response.toolCalls.map((toolCall) => {
+                    return {
+                      name: toolCall.name,
+                      arguments: toolCall.arguments,
+                    };
+                  })
+                : [],
+              toolCallsResult: toolCallsResult,
+            },
+          }));
+
+          console.log("updating alertsContext", questionId);
+        }
+      }
+
+      const transformedResult = alert
+        ? await window.electronAPI.transformToolResponseToAlert(
+            toolCallsResult,
+            [{ role: "user", content: message }]
+          )
+        : await window.electronAPI.transformToolResponse(toolCallsResult, [
+            { role: "user", content: message },
+          ]);
+      console.log("askAINoChat transformedResult", transformedResult);
+      setIsRefreshingDashboard(false);
+      return transformedResult;
+    },
+    []
+  );
+
+  const fetchAlertData = useCallback(
+    async (alert: {
+      id?: number;
+      suggestedType?: "NewsAlert";
+      color?: string;
+      question: string;
+      additionalInstructions?: string;
+    }) => {
+      if (!mcpConnected) {
+        return {
+          id: alert.id,
+          title: "No connections",
+          type: alert.suggestedType || "NewsAlert",
+          caption: `Add new connections in top left`,
+          color: alert.color || "#4a90e2",
+          hero: "🔌",
+        };
+      }
+      // Process the alert
+      const result = await askAINoChat(
+        `${alert.question} ${alert.additionalInstructions}`,
+        alert.id,
+        true
+      );
+      try {
+        const parsedResult = JSON.parse(result);
+        return {
+          ...alert,
+          ...parsedResult,
+          id: alert.id,
+        };
+      } catch (error) {
+        console.error(`Error processing alert "${alert.question}":`, error);
+        return {
+          id: alert.id,
+          title: alert.question,
+          type: alert.suggestedType || "NewsAlert",
+          caption: alert.additionalInstructions || "",
+          color: alert.color || "#4a90e2",
+          hero: "🚨",
+        };
+      }
+    },
+    [askAINoChat, mcpConnected]
+  );
+
+  // Fetch data for a specific question
+  const fetchQuestionData = useCallback(
+    async (question: {
+      id?: number;
+      question: string;
+      additionalInstructions?: string;
+      suggestedTitle?: string;
+      suggestedType?: string;
+      customColor?: string;
+    }) => {
+      if (!mcpConnected)
+        return {
+          id: question.id,
+          title: "No connections",
+          type: question.suggestedType || "NumberMetric",
+          color: question.customColor || "#4a90e2",
+          value: "Error",
+          caption: `Add new connections in top left`,
+        };
+
+      try {
+        // Process the question
+        const result = await askAINoChat(
+          `${question.question} ${
+            question.additionalInstructions
+              ? `(${question.additionalInstructions})`
+              : ""
+          }`,
+          question.id
+        );
+
+        try {
+          const parsedResult = JSON.parse(result);
+          return {
+            ...question,
+            ...parsedResult,
+            id: question.id,
+            color: question.customColor || "#4a90e2",
+          };
+        } catch (e) {
+          console.error("Error parsing result:", e);
+          return {
+            id: question.id,
+            title: question.suggestedTitle || "Dashboard Metric",
+            type: question.suggestedType || "NumberMetric",
+            color: question.customColor || "#4a90e2",
+            value: "Error",
+            caption: "Failed to parse result",
+          };
+        }
+      } catch (error) {
+        console.error(
+          `Error processing question "${question.question}":`,
+          error
+        );
+        return {
+          id: question.id,
+          title: question.suggestedTitle || "Dashboard Metric",
+          type: question.suggestedType || "NumberMetric",
+          color: question.customColor || "#4a90e2",
+          value: "Error",
+          caption: `Failed to process: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        };
+      }
+    },
+    [askAINoChat, mcpConnected]
+  );
 
   // Load dashboard questions when component mounts
   useEffect(() => {
     const loadDashboardQuestions = async () => {
       try {
-        const result = await window.electronAPI.getDashboardQuestions();
-        if (result.success && result.questions) {
-          setDashboardQuestions(result.questions);
-        } else {
-          console.error("Failed to load dashboard questions:", result.error);
-        }
+        refreshRecentActivity();
       } catch (error) {
         console.error("Error loading dashboard questions:", error);
       }
     };
 
     loadDashboardQuestions();
-  }, []);
+  }, [refreshRecentActivity]);
 
   // Load available MCP servers and connected clients when component mounts
   useEffect(() => {
+    console.log("Setting up MCP servers and event listeners");
     loadMcpServers();
 
     // Set up listener for server connections
@@ -223,13 +435,14 @@ export default function Home() {
 
     // Clean up the listener when the component unmounts
     return () => {
+      console.log("Cleaning up server connection event listener");
       unsubscribe();
     };
   }, []);
 
   // Fetch Mixpanel data when connected to MCP
   useEffect(() => {
-    const fetchCardsData = async (dummy: boolean = false) => {
+    const fetchCardsData = async (dummy = false) => {
       // START DUMMY DATA
       if (dummy) {
         setCardsData([
@@ -251,7 +464,7 @@ export default function Home() {
         return;
       }
       // END DUMMY DATA
-      if (mcpConnected && dashboardQuestions.length > 0) {
+      if (dashboardQuestions.length > 0) {
         const results = await Promise.all(
           dashboardQuestions.map((question) => fetchQuestionData(question))
         );
@@ -259,50 +472,41 @@ export default function Home() {
       }
     };
 
-    const fetchAlertData = async (dummy: boolean = false) => {
-      // START DUMMY DATA
-      if (dummy) {
-        setDashboardAlerts([
-          {
-            title: "Dashboard Alert 1",
-            type: "NewsAlert",
-            caption: "This is a news alert",
-            color: "#000000",
-            hero: "🚨",
-          },
-          {
-            title: "Dashboard Alert 2",
-            type: "NewsAlert",
-            caption: "This is a news alert",
-            color: "#007733",
-            hero: "$4,519",
-          },
-        ]);
-        return;
-      }
-      // END DUMMY DATA
-      if (mcpConnected) {
-        const result = await askAINoChat(
-          "Look at today's top events and flag the best thing demonstrating a business success standing out as a news alert",
-          undefined,
-          true
-        );
-        console.log("fetchAlertData result", result);
-        const parsedResult = JSON.parse(result);
-        const resultBad = await askAINoChat(
-          "Look at my credit card transactions in the past week and flag high spending",
-          undefined,
-          true
-        );
-        console.log("fetchAlertData resultBad", resultBad);
-        const parsedResultBad = JSON.parse(resultBad);
-        setDashboardAlerts([parsedResult, parsedResultBad]);
+    const fetchAlertsData = async (dummy = false) => {
+      if (dashboardAlerts.length > 0) {
+        const results = dummy
+          ? // START DUMMY DATA
+            dashboardAlerts.map((alert) => {
+              return {
+                question: "What is the news?",
+                id: 1,
+                title: "Dashboard Alert 1",
+                type: "NewsAlert",
+                caption: "This is a news alert",
+                color: "#000000",
+                hero: "🚨",
+              };
+            })
+          : // END DUMMY DATA
+
+            await Promise.all(
+              dashboardAlerts.map((alert) => fetchAlertData(alert))
+            );
+        console.log("fetchAlertsData results", results);
+        setAlertsData(results);
       }
     };
 
     fetchCardsData(false);
-    // fetchAlertData(false);
-  }, [mcpConnected, connectedClients, dashboardQuestions]);
+    fetchAlertsData(false);
+  }, [
+    mcpConnected,
+    connectedClients,
+    dashboardQuestions,
+    dashboardAlerts,
+    fetchAlertData,
+    fetchQuestionData,
+  ]);
 
   const loadMcpServers = async () => {
     try {
@@ -317,8 +521,9 @@ export default function Home() {
           "connecting" | "connected" | "error"
         > = {};
 
-        // First, mark all available servers as not connected
-        Object.keys(clientsResult.connectedClients).forEach((serverName) => {
+        // First, initialize all servers as not connected
+        const allServerNames = [...Object.keys(serverConnectionStatus), ...clientsResult.connectedClients];
+        allServerNames.forEach((serverName) => {
           newConnectionStatus[serverName] = "error";
         });
 
@@ -339,6 +544,7 @@ export default function Home() {
           }
         );
 
+        console.log("Updated server connection status:", newConnectionStatus);
         setServerConnectionStatus(newConnectionStatus);
 
         if (clientsResult.connectedClients.length > 0) {
@@ -356,51 +562,6 @@ export default function Home() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  const askAINoChat = async (
-    message: string,
-    questionId?: number,
-    alert?: boolean
-  ) => {
-    const response = await window.electronAPI.processAiMessage(message, []);
-    let toolCallsResult: Array<{ name: string; response: any }> | undefined;
-    console.log("tool calls", response.toolCalls);
-    if (response.toolCalls && response.toolCalls.length > 0) {
-      const toolCallsResponse = await window.electronAPI.callTools(
-        response.toolCalls
-      );
-      toolCallsResult = toolCallsResponse;
-    }
-
-    const result = response.content + "\n\n" + toolCallsResult;
-    console.log("askAINoChat result", result);
-    if (questionId) {
-      // Update the context with the new data
-      setCardsContext((prev) => ({
-        ...prev,
-        [questionId]: {
-          aiResponse: response.content,
-          toolCalls: response.toolCalls ? response.toolCalls.map((toolCall) => {
-            return {
-              name: toolCall.name,
-              arguments: toolCall.arguments,
-            };
-          }) : [],
-          toolCallsResult: toolCallsResult,
-        },
-      }));
-    }
-
-    const transformedResult = alert
-      ? await window.electronAPI.transformToolResponseToAlert(toolCallsResult, [
-          { role: "user", content: message },
-        ])
-      : await window.electronAPI.transformToolResponse(toolCallsResult, [
-          { role: "user", content: message },
-        ]);
-    console.log("askAINoChat transformedResult", transformedResult);
-    return transformedResult;
-  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -456,51 +617,230 @@ export default function Home() {
         console.log("modifiedUserMessage!!!!: ", modifiedUserMessage);
       }
 
-      // const response = await window.electronAPI.processAiMessage(
-      //   modifiedUserMessage,
-      //   conversationHistory
-      // );
-
-      // // Add AI response to chat
-      // setMessages((prev) => [
-      //   ...prev,
-      //   { text: response.content, sender: "assistant", type: "text" },
-      // ]);
-
-      // // Process any tool calls
-      // if (response.toolCalls && response.toolCalls.length > 0) {
-      //   const toolCallsResult = await window.electronAPI.processToolCalls(
-      //     response.toolCalls,
-      //     [
-      //       ...conversationHistory,
-      //       { role: "assistant", content: response.content },
-      //     ]
-      //   );
-
-      //   setMessages((prev) => [
-      //     ...prev,
-      //     { text: toolCallsResult, sender: "assistant", type: "tool_result" },
-      //   ]);
-      // }
+      if (connectedClients.length === 0) {
+        modifiedUserMessage = `${modifiedUserMessage}\n\nBy the way, I have not connected to any external tools or MCP servers yet, so you should tell me to connect to them first by saying "Check out the top left plus button to add new connections so I can access your business tools."`;
+      }
       const role: "user" | "assistant" = "user";
       const messagesToProcess = [
         ...conversationHistory,
         { role, content: modifiedUserMessage },
       ];
-      const swarmResponse = await window.electronAPI.runSwarm(
+
+      // Use streaming for better user experience
+      const response = await window.electronAPI.runSwarm(
         currentAgentName,
-        messagesToProcess
+        messagesToProcess,
+        true // Enable streaming
       );
-      console.log("swarmResponse", swarmResponse);
-      setMessages(
-        swarmResponse.messages.map((message) => ({
-          role: message.role,
-          sender: message.sender,
-          type: message.type,
-          content: message.content,
-        }))
-      );
-      setCurrentAgentName(swarmResponse.agentName);
+
+      // Check if we got a streamId for event-based streaming
+      if (response && response.streamId) {
+        // Create a temporary message for streaming content
+        let streamingMessage: any = null;
+        let isStreaming = false;
+        let isComplete = false;
+
+        // Set up event listeners for stream chunks
+        const unsubscribeChunk = window.electronAPI.onStreamChunk(
+          response.streamId,
+          (chunk) => {
+            // Skip processing if already complete
+            if (isComplete) return;
+
+            // Handle delimiter chunks that mark start/end of streaming
+            if ("delim" in chunk) {
+              if (chunk.delim === "start") {
+                isStreaming = true;
+                // Add a placeholder message for streaming content
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  streamingMessage = {
+                    role: "assistant",
+                    sender: currentAgentName,
+                    type: "text",
+                    content: "",
+                    wasStreamed: true,
+                  };
+                  return [...newMessages, streamingMessage];
+                });
+              } else if (chunk.delim === "end") {
+                console.log("RECEIVED END DELIM");
+                isStreaming = false;
+                // If we received an 'end' delimiter but no final response yet,
+                // mark the streaming as complete to prevent further processing
+                // if (!isComplete) {
+                //   isComplete = true;
+
+                //   // Clean up event listeners
+                //   unsubscribeChunk();
+                //   unsubscribeDone();
+
+                //   // Reset processing state
+                //   setIsProcessing(false);
+                // }
+              }
+              return;
+            }
+
+            // Handle error chunks
+            if ("error" in chunk) {
+              setMessages((prev) => {
+                const newMessages = [...prev];
+                newMessages.push({
+                  role: "assistant",
+                  sender: currentAgentName,
+                  type: "text",
+                  content: `Error: ${chunk.error}`,
+                });
+                return newMessages;
+              });
+              // Mark as complete to prevent further processing
+              isComplete = true;
+
+              // Clean up event listeners
+              unsubscribeChunk();
+              unsubscribeDone();
+
+              // Reset processing state
+              setIsProcessing(false);
+              return;
+            }
+
+            // Handle the final response object
+            if ("response" in chunk) {
+              // Update with the complete conversation
+              const finalResponse = chunk.response;
+              setMessages((prev) => {
+                // Add all the messages from the final response
+                return [
+                  ...finalResponse.messages.map((message: any) => ({
+                    role: message.role,
+                    sender: message.sender,
+                    type: message.type,
+                    content: message.content,
+                  })),
+                ];
+              });
+
+              setCurrentAgentName(
+                finalResponse.agentName || currentAgentName
+              );
+              // Mark as complete to prevent further processing
+              isComplete = true;
+
+              // Clean up event listeners
+              unsubscribeChunk();
+              unsubscribeDone();
+
+              // Reset processing state
+              setIsProcessing(false);
+              return;
+            }
+
+            // Handle streaming content chunks
+            if (isStreaming && !isComplete) {
+              if (chunk.type === "text") {
+                // Only process if there's actual content
+                if (chunk.content) {
+                  // Update the streaming message with new content
+                  setMessages((prev) => {
+                    const newMessages = [...prev];
+                    const lastIndex = newMessages.length - 1;
+
+                    // If the last message is from the assistant and is text, append to it
+                    if (
+                      lastIndex >= 0 &&
+                      newMessages[lastIndex].role === "assistant" &&
+                      newMessages[lastIndex].type === "text"
+                    ) {
+                      newMessages[lastIndex].content += chunk.content;
+                    } else {
+                      // Create a new message
+                      newMessages.push({
+                        role: "assistant",
+                        sender: chunk.sender || currentAgentName,
+                        type: "text",
+                        content: chunk.content,
+                        wasStreamed: true,
+                      });
+                    }
+
+                    return newMessages;
+                  });
+                }
+              } else if (chunk.type === "tool_use") {
+                // Handle tool use messages
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+
+                  // Add the tool use message
+                  newMessages.push({
+                    role: "assistant",
+                    sender: chunk.sender || currentAgentName,
+                    type: "tool_use",
+                    content: chunk.content,
+                    wasStreamed: true,
+                  });
+
+                  return newMessages;
+                });
+              } else if (chunk.type === "tool_result") {
+                // Handle tool result messages
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+
+                  console.log(
+                    "RECEIVED TOOL RESULT",
+                    JSON.stringify(chunk, null, 2)
+                  );
+
+                  // Add the tool result message
+                  newMessages.push({
+                    role: chunk.role || "user",
+                    sender: chunk.sender || currentAgentName,
+                    type: "tool_result",
+                    content: chunk.content,
+                    wasStreamed: true,
+                  });
+
+                  return newMessages;
+                });
+              }
+            }
+          }
+        );
+
+        // Set up event listener for stream completion
+        const unsubscribeDone = window.electronAPI.onStreamDone(
+          response.streamId,
+          () => {
+            // Mark as complete
+            isComplete = true;
+
+            // Clean up event listeners
+            unsubscribeChunk();
+            unsubscribeDone();
+
+            // Ensure processing state is reset
+            setIsProcessing(false);
+          }
+        );
+      } else {
+        // Fallback to non-streaming response
+        console.log("Non-streaming response received:", response);
+        if (response && response.messages) {
+          setMessages(
+            response.messages.map((message: any) => ({
+              role: message.role,
+              sender: message.sender,
+              type: message.type,
+              content: message.content,
+            }))
+          );
+          setCurrentAgentName(response.agentName);
+        }
+        setIsProcessing(false);
+      }
     } catch (error) {
       console.error("Error processing message:", error);
       setMessages((prev) => [
@@ -515,7 +855,6 @@ export default function Home() {
           content: error instanceof Error ? error.message : "Unknown error",
         },
       ]);
-    } finally {
       setIsProcessing(false);
     }
   };
@@ -552,10 +891,10 @@ export default function Home() {
         const result = await window.electronAPI.deleteDashboardQuestion(id);
         if (result.success) {
           // Refresh questions list
-          const questionsResult =
-            await window.electronAPI.getDashboardQuestions();
+          const questionsResult = await window.electronAPI.getDashboardConfig();
           if (questionsResult.success) {
-            setDashboardQuestions(questionsResult.questions);
+            setDashboardQuestions(questionsResult.config.questions);
+            setDashboardAlerts(questionsResult.config.alerts);
             // Remove the card from the cards data
             setCardsData((prev) => prev.filter((card) => card.id !== id));
           }
@@ -565,62 +904,6 @@ export default function Home() {
       } catch (error) {
         console.error("Error deleting question:", error);
       }
-    }
-  };
-
-  // Fetch data for a specific question
-  const fetchQuestionData = async (question: {
-    id?: number;
-    question: string;
-    additionalInstructions?: string;
-    suggestedTitle?: string;
-    suggestedType?: string;
-    customColor?: string;
-  }) => {
-    if (!mcpConnected) return null;
-
-    try {
-      // Process the question
-      const result = await askAINoChat(
-        `${question.question} ${
-          question.additionalInstructions
-            ? `(${question.additionalInstructions})`
-            : ""
-        }`,
-        question.id
-      );
-
-      try {
-        const parsedResult = JSON.parse(result);
-        return {
-          ...question,
-          ...parsedResult,
-          id: question.id,
-          color: question.customColor || "#4a90e2",
-        };
-      } catch (e) {
-        console.error("Error parsing result:", e);
-        return {
-          id: question.id,
-          title: question.suggestedTitle || "Dashboard Metric",
-          type: question.suggestedType || "NumberMetric",
-          color: question.customColor || "#4a90e2",
-          value: "Error",
-          caption: "Failed to parse result",
-        };
-      }
-    } catch (error) {
-      console.error(`Error processing question "${question.question}":`, error);
-      return {
-        id: question.id,
-        title: question.suggestedTitle || "Dashboard Metric",
-        type: question.suggestedType || "NumberMetric",
-        color: question.customColor || "#4a90e2",
-        value: "Error",
-        caption: `Failed to process: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
-      };
     }
   };
 
@@ -812,7 +1095,7 @@ export default function Home() {
 
   return (
     <div className="flex h-[100vh] w-full overflow-hidden">
-      <div className={`sidebar ${sidebarExpanded ? "expanded" : "collapsed"}`}>
+      <div className={`sidebar collapsed`}>
         <MainSidebar
           connectedClients={connectedClients}
           serverConnectionStatus={serverConnectionStatus}
@@ -867,12 +1150,12 @@ export default function Home() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="Type your message..."
-                disabled={isProcessing || !mcpConnected}
+                disabled={isProcessing}
                 className="flex-1 p-2.5 border border-gray-200 rounded mr-2 text-sm"
               />
               <Button
                 type="submit"
-                disabled={isProcessing || !inputValue.trim() || !mcpConnected}
+                disabled={isProcessing || !inputValue.trim()}
                 className="px-5 py-2.5 bg-blue-500 text-white border-none rounded cursor-pointer font-medium disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-600"
               >
                 Send
@@ -883,11 +1166,15 @@ export default function Home() {
 
         <div className="w-1/2 flex flex-col bg-white overflow-hidden">
           <RecentActivity
+            isRefreshingDashboard={isRefreshingDashboard}
             activity={{
+              alertConfigs: dashboardAlerts,
               emails: [],
               calendarEvents: [],
-              alerts: dashboardAlerts,
+              alerts: alertsData,
             }}
+            alertsContext={alertsContext}
+            refreshRecentActivity={refreshRecentActivity}
           />
 
           {selectedCard !== null ? (
@@ -1046,11 +1333,11 @@ export default function Home() {
             </div>
           ) : (
             <div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5 p-5 overflow-y-auto h-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 p-4 overflow-y-auto h-full">
                 {cardsData.map((card, index) => (
                   <div
                     key={card.id || index}
-                    className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer flex flex-col h-48"
+                    className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer flex flex-col max-h-48"
                     onClick={() => {
                       setSelectedCard(card);
                       setEditingQuestion(card);
@@ -1076,6 +1363,16 @@ export default function Home() {
                     </div>
                   </div>
                 ))}
+                {cardsData.length === 0 && (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer flex flex-col h-48">
+                    <div className="p-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                      <h3 className="m-0 text-base text-gray-800 font-semibold">
+                        No metrics, add a metric to start building your
+                        dashboard
+                      </h3>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="w-full px-4">
                 <Button
@@ -1084,7 +1381,7 @@ export default function Home() {
                   className="px-3 w-full py-1 font-medium"
                   disabled={!mcpConnected}
                 >
-                  +
+                  New Metric +
                 </Button>
               </div>
             </div>

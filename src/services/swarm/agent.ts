@@ -5,7 +5,7 @@ export type AgentFunction = (() => string) | Agent | Record<string, any> | MCPTo
 
 export class Agent {
   name: string;
-  instructions: string | ((contextVariables?: Record<string, any>) => string) = "You are a helpful agent.";
+  instructions: string | ((contextVariables?: Record<string, any>, userMessage?: string) => string) = "You are a helpful agent.";
   functions: AgentFunction[] = [];
   model: string;
   toolChoice: ToolChoice = {type: "auto"};
@@ -15,9 +15,9 @@ export class Agent {
     Object.assign(this, init);
   }
 
-  getInstructions(contextVariables?: Record<string, any>): string {
+  getInstructions(contextVariables?: Record<string, any>, userMessage?: string): string {
     return typeof this.instructions === "function"
-      ? this.instructions(contextVariables)
+      ? this.instructions(contextVariables, userMessage)
       : this.instructions;
   }
 

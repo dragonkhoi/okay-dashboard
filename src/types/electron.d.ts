@@ -28,10 +28,11 @@ interface ElectronAPI {
   openExternalLink: (url: string) => Promise<any>;
   
   // AI Agent API
-  runSwarm: (currentAgentName: string, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>) => Promise<{
-    agentName: string;
-    messages: any[];
-  }>;
+  runSwarm: (
+    currentAgentName: string, 
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+    stream?: boolean
+  ) => Promise<any>;
   processAiMessage: (message: string, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>) => Promise<{
     content: string;
     toolCalls?: Array<{ name: string; arguments: Record<string, any> }>;
@@ -48,6 +49,11 @@ interface ElectronAPI {
   removeReactComponent: (name: string) => Promise<any>;
     
   // Dashboard Configuration API
+  getDashboardConfig: () => Promise<{
+    success: boolean;
+    config: DashboardConfig;
+    error?: string;
+  }>;
   getDashboardQuestions: () => Promise<{
     success: boolean;
     questions: Array<{
@@ -89,7 +95,32 @@ interface ElectronAPI {
     success: boolean;
     error?: string;
   }>;
-
+  addDashboardAlert: (alert: {
+    question: string;
+    additionalInstructions?: string;
+    customColor?: string;
+  }) => Promise<{
+    success: boolean;
+    alert?: any;
+    error?: string;
+  }>;
+  updateDashboardAlert: (
+    id: number,
+    alert: {
+      question?: string;
+      additionalInstructions?: string;
+      customColor?: string;
+    }
+  ) => Promise<{
+    success: boolean;
+    alert?: any;
+    error?: string;
+  }>;
+  deleteDashboardAlert: (id: number) => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+  
   // Configuration API
   loadMcpServersConfig: () => Promise<{
     success: boolean;
@@ -105,6 +136,10 @@ interface ElectronAPI {
     error?: string;
   }>;
   getAppConfig: () => Promise<AppConfig>;
+
+  // Stream events
+  onStreamChunk: (streamId: string, callback: (chunk: any) => void) => () => void;
+  onStreamDone: (streamId: string, callback: () => void) => () => void;
 }
 
 declare global {

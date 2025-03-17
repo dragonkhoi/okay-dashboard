@@ -41,8 +41,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('open-external-link', url),
   
   // AI Agent API
-  runSwarm: (currentAgentName: string, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>) => 
-    ipcRenderer.invoke('ai:runSwarm', currentAgentName, conversationHistory),
+  runSwarm: (currentAgentName: string, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>, stream?: boolean) => 
+    ipcRenderer.invoke('ai:runSwarm', currentAgentName, conversationHistory, stream),
   processAiMessage: (message: string, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>) => 
     ipcRenderer.invoke('ai:processMessage', message, conversationHistory),
   processToolCalls: (toolCalls: Array<{ name: string; arguments: Record<string, any> }>, conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>) => 
@@ -65,10 +65,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('react:removeComponent', name),
     
   // Dashboard Configuration API
+  getDashboardConfig: () =>
+    ipcRenderer.invoke('dashboard:getConfig'),
   getDashboardQuestions: () =>
     ipcRenderer.invoke('dashboard:getQuestions'),
   saveDashboardQuestions: (questions: Array<any>) =>
     ipcRenderer.invoke('dashboard:saveQuestions', questions),
+  addDashboardQuestion: (question: any) =>
+    ipcRenderer.invoke('dashboard:addQuestion', question),
+  updateDashboardQuestion: (id: number, question: any) =>
+    ipcRenderer.invoke('dashboard:updateQuestion', id, question),
+  deleteDashboardQuestion: (id: number) =>
+    ipcRenderer.invoke('dashboard:deleteQuestion', id),
+  addDashboardAlert: (alert: any) =>
+    ipcRenderer.invoke('dashboard:addAlert', alert),
+  updateDashboardAlert: (id: number, alert: any) =>
+    ipcRenderer.invoke('dashboard:updateAlert', id, alert),
+  deleteDashboardAlert: (id: number) =>
+    ipcRenderer.invoke('dashboard:deleteAlert', id),
+
   
   // Config API
   loadMcpServersConfig: () =>
@@ -79,4 +94,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('config:saveEnvVars', envVars),
   getAppConfig: () =>
     ipcRenderer.invoke('config:getAppConfig'),
+
+  // Stream events
+  onStreamChunk: (streamId: string, callback: (chunk: any) => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, chunk: any) => callback(chunk);
+    ipcRenderer.on(`ai:stream-chunk-${streamId}`, subscription);
+    
+    return () => {
+      ipcRenderer.removeListener(`ai:stream-chunk-${streamId}`, subscription);
+    };
+  },
+  
+  onStreamDone: (streamId: string, callback: () => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent) => callback();
+    ipcRenderer.on(`ai:stream-done-${streamId}`, subscription);
+    
+    return () => {
+      ipcRenderer.removeListener(`ai:stream-done-${streamId}`, subscription);
+    };
+  },
 });

@@ -11,12 +11,23 @@ export interface DashboardQuestion {
   customColor?: string;
 }
 
+export interface DashboardAlert {
+  id?: number;
+  question: string;
+  additionalInstructions?: string;
+  customColor?: string;
+  suggestedType?: "NewsAlert";
+}
+
 export interface DashboardConfig {
   questions: DashboardQuestion[];
+  alerts: DashboardAlert[];
 }
 
 const DEFAULT_CONFIG: DashboardConfig = {
   questions: [
+  ],
+  alerts: [
   ]
 };
 
@@ -54,6 +65,11 @@ export class DashboardConfigService {
         id: question.id || index + 1
       }));
 
+      config.alerts = config.alerts.map((alert, index) => ({
+        ...alert,
+        id: alert.id || index + 1
+      }));
+
       return config;
     } catch (error) {
       console.error('Error loading dashboard configuration:', error);
@@ -72,6 +88,11 @@ export class DashboardConfigService {
         id: question.id || index + 1
       }));
 
+      config.alerts = config.alerts.map((alert, index) => ({
+        ...alert,
+        id: alert.id || index + 1
+      }));
+
       const fileContent = JSON.stringify(config, null, 2);
       fs.writeFileSync(this.configPath, fileContent, 'utf-8');
       return true;
@@ -84,7 +105,12 @@ export class DashboardConfigService {
   /**
    * Get all dashboard questions
    */
-  public getQuestions(): DashboardQuestion[] {
+  public getDashboardConfig(): DashboardConfig {
+    const config = this.loadConfig();
+    return config;
+  }
+
+  public getDashboardQuestions(): DashboardQuestion[] {
     const config = this.loadConfig();
     return config.questions;
   }
@@ -145,6 +171,54 @@ export class DashboardConfigService {
     config.questions.splice(index, 1);
     this.saveConfig(config);
     
+    return true;
+  }
+
+  public getAlerts(): DashboardAlert[] {
+    const config = this.loadConfig();
+    return config.alerts;
+  }
+
+  public addAlert(alert: DashboardAlert): DashboardAlert {
+    const config = this.loadConfig();
+    // Generate a new ID
+    const maxId = config.alerts.reduce((max, a) => Math.max(max, a.id || 0), 0);
+    const newAlert = {
+      ...alert,
+      id: maxId + 1
+    };
+    config.alerts.push(newAlert);
+    this.saveConfig(config);
+    return newAlert;
+  }
+
+  public updateAlert(id: number, alert: Partial<DashboardAlert>): DashboardAlert | null {
+    const config = this.loadConfig();
+    const index = config.alerts.findIndex(a => a.id === id);
+    if (index === -1) {
+      return null;
+    }
+
+    const updatedAlert = {
+      ...config.alerts[index],
+      ...alert,
+      id: alert.id || index + 1
+    };
+
+    config.alerts[index] = updatedAlert;
+    this.saveConfig(config);
+    return updatedAlert;
+  }
+
+  public deleteAlert(id: number): boolean {
+    const config = this.loadConfig();
+    const index = config.alerts.findIndex(a => a.id === id);
+    if (index === -1) {
+      return false;
+    }
+
+    config.alerts.splice(index, 1);
+    this.saveConfig(config);
     return true;
   }
 } 
